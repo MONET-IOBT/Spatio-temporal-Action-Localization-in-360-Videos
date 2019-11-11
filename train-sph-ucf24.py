@@ -17,10 +17,11 @@ import torch.optim as optim
 import torch.nn.init as init
 import argparse
 import torch.utils.data as data
-from data import v2, UCF24Detection, AnnotationTransform, detection_collate, CLASSES, BaseTransform
+from data import v2, AnnotationTransform, CLASSES, BaseTransform
+from data.omni_dataset import OmniUCF24, sph_detection_collate
 from utils.augmentations import SSDAugmentation
-from layers.modules import MultiBoxLoss
-from ssd import build_ssd
+from layers.modules.sph_multibox_loss import SphMultiBoxLoss
+from sph_ssd import build_sph_ssd
 import numpy as np
 import time
 from utils.evaluation import evaluate_detections
@@ -48,13 +49,13 @@ parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to tra
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
-parser.add_argument('--stepvalues', default='30000,60000,100000', type=str, help='iter numbers where learing rate to be dropped')
+parser.add_argument('--stepvalues', default='30000,60000,90000', type=str, help='iter numbers where learing rate to be dropped')
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
 parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom Server')
-parser.add_argument('--data_root', default='/mnt/mercury-beta/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/mnt/mercury-beta/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -73,7 +74,7 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 
 def main():
-    args.cfg = v2
+    args.cfg = 'sph_v2'
     args.train_sets = 'train'
     args.means = (104, 117, 123)
     num_classes = len(CLASSES) + 1
@@ -93,7 +94,7 @@ def main():
     if not os.path.isdir(args.save_root):
         os.makedirs(args.save_root)
 
-    net = build_ssd(300, args.num_classes)
+    net = build_sph_ssd(300, args.num_classes)
 
     if args.cuda:
         net = net.cuda()
@@ -138,7 +139,7 @@ def main():
             params += [{'params':[param], 'lr': args.lr, 'weight_decay':args.weight_decay}]
 
     optimizer = optim.SGD(params, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-    criterion = MultiBoxLoss(args.num_classes, 0.5, True, 0, True, 3, 0.5, False, args.cuda)
+    criterion = SphMultiBoxLoss(args.num_classes, 0.5, True, 0, True, 3, 0.5, False, args.cuda)
     scheduler = MultiStepLR(optimizer, milestones=args.stepvalues, gamma=args.gamma)
     train(args, net, optimizer, criterion, scheduler)
 
@@ -159,25 +160,29 @@ def train(args, net, optimizer, criterion, scheduler):
     cls_losses = AverageMeter()
 
     print('Loading Dataset...')
-    train_dataset = UCF24Detection(args.data_root, args.train_sets, SSDAugmentation(args.ssd_dim, args.means),
-                                   AnnotationTransform(), input_type=args.input_type)
-    val_dataset = UCF24Detection(args.data_root, 'test', BaseTransform(args.ssd_dim, args.means),
-                                 AnnotationTransform(), input_type=args.input_type,
-                                 full_test=False)
+    # train_dataset = UCF24Detection(args.data_root, args.train_sets, SSDAugmentation(args.ssd_dim, args.means),
+    #                                AnnotationTransform(), input_type=args.input_type)
+    # val_dataset = UCF24Detection(args.data_root, 'test', BaseTransform(args.ssd_dim, args.means),
+    #                              AnnotationTransform(), input_type=args.input_type,
+    #                              full_test=False)
+    train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(args.ssd_dim, args.means),
+                           AnnotationTransform(), input_type=args.input_type)
+    val_dataset = OmniUCF24(args.data_root, 'test', SSDAugmentation(args.ssd_dim, args.means),
+                           AnnotationTransform(), input_type=args.input_type)
     epoch_size = len(train_dataset) // args.batch_size
-    print('Training SSD on', train_dataset.name)
+    print('Training SSD on', args.dataset)
 
     batch_iterator = None
     train_data_loader = data.DataLoader(train_dataset, args.batch_size, num_workers=args.num_workers,
-                                  shuffle=True, collate_fn=detection_collate, pin_memory=True)
+                                  shuffle=True, collate_fn=sph_detection_collate, pin_memory=True)
     val_data_loader = data.DataLoader(val_dataset, args.batch_size, num_workers=args.num_workers,
-                                 shuffle=False, collate_fn=detection_collate, pin_memory=True)
+                                 shuffle=False, collate_fn=sph_detection_collate, pin_memory=True)
     itr_count = 0
     torch.cuda.synchronize()
     t0 = time.perf_counter()
     iteration = 0
     while iteration <= args.max_iter:
-        for i, (images, targets, img_indexs) in enumerate(train_data_loader):
+        for i, (images, targets) in enumerate(train_data_loader):
 
             if iteration > args.max_iter:
                 break
@@ -281,7 +286,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
             torch.cuda.synchronize()
             t1 = time.perf_counter()
 
-            images, targets, img_indexs = next(batch_iterator)
+            images, targets = next(batch_iterator)
             batch_size = images.size(0)
             height, width = images.size(2), images.size(3)
 

@@ -12,11 +12,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import v2
+from data import sph_v2
+from layers.functions.sph_prior_box import SphPriorBox
 import os
 
 
-class SSD(nn.Module):
+class Sph_SSD(nn.Module):
     """Single Shot Multibox Architecture
     The network is composed of a base VGG network followed by the
     added multibox conv layers.  Each multibox layer branches into
@@ -33,11 +34,11 @@ class SSD(nn.Module):
     """
 
     def __init__(self, base, extras, head, num_classes):
-        super(SSD, self).__init__()
+        super(Sph_SSD, self).__init__()
 
         self.num_classes = num_classes
         # TODO: implement __call__ in PriorBox
-        self.priorbox = PriorBox(v2)
+        self.priorbox = SphPriorBox(sph_v2)
         with torch.no_grad():
             self.priors = self.priorbox.forward().cuda()
             self.num_priors = self.priors.size(0)
@@ -51,9 +52,6 @@ class SSD(nn.Module):
 
         self.loc = nn.ModuleList(head[0])
         self.conf = nn.ModuleList(head[1])
-
-        self.softmax = nn.Softmax(dim=1).cuda()
-        # self.detect = Detect(num_classes, 0, 200, 0.001, 0.45)
 
     def forward(self, x):
 
@@ -105,7 +103,7 @@ class SSD(nn.Module):
 
         loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
-        output = (loc.view(loc.size(0), -1, 4),
+        output = (loc.view(loc.size(0), -1, 7),
                   conf.view(conf.size(0), -1, self.num_classes),
                   self.priors
                   )
@@ -170,12 +168,12 @@ def multibox(vgg, extra_layers, cfg, num_classes):
     vgg_source = [24, -2]
     for k, v in enumerate(vgg_source):
         loc_layers += [nn.Conv2d(vgg[v].out_channels,
-                                 cfg[k] * 4, kernel_size=3, padding=1)]
+                                 cfg[k] * 7, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(vgg[v].out_channels,
                         cfg[k] * num_classes, kernel_size=3, padding=1)]
     for k, v in enumerate(extra_layers[1::2], 2):
         loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
-                                 * 4, kernel_size=3, padding=1)]
+                                 * 7, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                   * num_classes, kernel_size=3, padding=1)]
     return vgg, extra_layers, (loc_layers, conf_layers)
@@ -191,17 +189,17 @@ extras = {
     '512': [],
 }
 mbox = {
-    '300': [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
+    '300': [4*8, 6*8, 6*8, 6*8, 4*8, 4*8],  # number of boxes per feature map location
     '512': [],
 }
 
 
-def build_ssd(size=300, num_classes=21):
+def build_sph_ssd(size=300, num_classes=21):
 
     if size != 300:
         print("Error: Sorry only SSD300 is supported currently!")
         return
 
-    return SSD(*multibox(vgg(base[str(size)], 3),
+    return Sph_SSD(*multibox(vgg(base[str(size)], 3),
                                 add_extras(extras[str(size)], 1024),
                                 mbox[str(size)], num_classes), num_classes)
