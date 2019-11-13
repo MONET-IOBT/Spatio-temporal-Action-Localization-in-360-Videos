@@ -9,7 +9,7 @@ https://github.com/amdegroot/ssd.pytorch
 #SSD300 CONFIGS
 # newer version: use additional conv11_2 layer as last layer before multibox layers
 v2 = {
-    'feature_maps' : [38, 19, 10, 5, 3, 1],
+    'feature_maps' : [(38,75), (19,38), (10,19), (5,10), (3,5), (1,3)],
 
     'min_dim' : 300,
 
@@ -45,7 +45,7 @@ sph_v2 = {
     #                    [2, 1/2, 3, 1/3], [2, 1/2], [2, 1/2]],
     'aspect_ratios' : [[2], [2, 3], [2, 3], [2, 3], [2], [2]],
 
-    'num_rotations' : 2,
+    'num_rotations' : 8,
 
     'variance' : [0.1, 0.2],
 

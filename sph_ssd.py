@@ -103,10 +103,11 @@ class Sph_SSD(nn.Module):
 
         loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
-        output = (loc.view(loc.size(0), -1, 7),
+        output = (loc.view(loc.size(0), -1, 5),
                   conf.view(conf.size(0), -1, self.num_classes),
                   self.priors
                   )
+        assert(output[0].shape[-2] == output[2].shape[-2])
 
         return output
 
@@ -168,12 +169,12 @@ def multibox(vgg, extra_layers, cfg, num_classes):
     vgg_source = [24, -2]
     for k, v in enumerate(vgg_source):
         loc_layers += [nn.Conv2d(vgg[v].out_channels,
-                                 cfg[k] * 7, kernel_size=3, padding=1)]
+                                 cfg[k] * 5, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(vgg[v].out_channels,
                         cfg[k] * num_classes, kernel_size=3, padding=1)]
     for k, v in enumerate(extra_layers[1::2], 2):
         loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
-                                 * 7, kernel_size=3, padding=1)]
+                                 * 5, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                   * num_classes, kernel_size=3, padding=1)]
     return vgg, extra_layers, (loc_layers, conf_layers)

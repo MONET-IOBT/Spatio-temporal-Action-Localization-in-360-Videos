@@ -48,18 +48,19 @@ def get_rotated_mat(outshape,inshape,rot_x,rot_y,rot_z,fov):
     xyz_rot[..., 0] = xyz[..., 0]
     xyz_rot[..., 1] = np.cos(rot_x) * xyz[..., 1] - np.sin(rot_x) * xyz[..., 2]
     xyz_rot[..., 2] = np.sin(rot_x) * xyz[..., 1] + np.cos(rot_x) * xyz[..., 2]
-    xyz = xyz_rot.copy()
     # rotate along y-axis
+    xyz = xyz_rot.copy()
     xyz_rot = xyz.copy()
     xyz_rot[..., 0] = np.cos(rot_y) * xyz[..., 0] - np.sin(rot_y) * xyz[..., 2]
     xyz_rot[..., 1] = xyz[..., 1]
     xyz_rot[..., 2] = np.sin(rot_y) * xyz[..., 0] + np.cos(rot_y) * xyz[..., 2]
-    xyz = xyz_rot.copy()
     # rotate along z-axis
+    xyz = xyz_rot.copy()
     xyz_rot = xyz.copy()
     xyz_rot[..., 0] = np.cos(rot_z) * xyz[..., 0] - np.sin(rot_z) * xyz[..., 1]
     xyz_rot[..., 1] = np.sin(rot_z) * xyz[..., 0] + np.cos(rot_z) * xyz[..., 1]
     xyz_rot[..., 2] = xyz[..., 2]
+    
     # get rotated uv matrix
     uv_rot = xyz2uv(xyz_rot)
 
@@ -105,32 +106,26 @@ def IoU(bbox1,bbox2,outshape=(300,600),inshape=(300,300),fov=np.pi/3):
 
 
 def uv2img_idx(uv, h, w, u_fov, v_fov, rot_x=0, rot_y=0, rot_z=0):
-    assert 0 < u_fov and u_fov < np.pi
-    assert 0 < v_fov and v_fov < np.pi
-    assert -np.pi < rot_y and rot_y < np.pi
-    assert -np.pi < rot_x and rot_x < np.pi
-    assert -np.pi < rot_z and rot_z < np.pi
-
     # the coord on sphere of each pixel in the output image
     xyz = uv2xyz(uv.astype(np.float64)) # out_h, out_w, (x,y,z)
     
-    # rotate along x-axis
+    # rotate along z-axis
     xyz_rot = xyz.copy()
-    xyz_rot[..., 0] = xyz[..., 0]
-    xyz_rot[..., 1] = np.cos(rot_x) * xyz[..., 1] - np.sin(rot_x) * xyz[..., 2]
-    xyz_rot[..., 2] = np.sin(rot_x) * xyz[..., 1] + np.cos(rot_x) * xyz[..., 2]
-    xyz = xyz_rot.copy()
+    xyz_rot[..., 0] = np.cos(rot_z) * xyz[..., 0] - np.sin(rot_z) * xyz[..., 1]
+    xyz_rot[..., 1] = np.sin(rot_z) * xyz[..., 0] + np.cos(rot_z) * xyz[..., 1]
+    xyz_rot[..., 2] = xyz[..., 2]
+    xyz = xyz_rot.copy() 
     # rotate along y-axis
     xyz_rot = xyz.copy()
     xyz_rot[..., 0] = np.cos(rot_y) * xyz[..., 0] - np.sin(rot_y) * xyz[..., 2]
     xyz_rot[..., 1] = xyz[..., 1]
     xyz_rot[..., 2] = np.sin(rot_y) * xyz[..., 0] + np.cos(rot_y) * xyz[..., 2]
     xyz = xyz_rot.copy()
-    # rotate along z-axis
+    # rotate along x-axis
     xyz_rot = xyz.copy()
-    xyz_rot[..., 0] = np.cos(rot_z) * xyz[..., 0] - np.sin(rot_z) * xyz[..., 1]
-    xyz_rot[..., 1] = np.sin(rot_z) * xyz[..., 0] + np.cos(rot_z) * xyz[..., 1]
-    xyz_rot[..., 2] = xyz[..., 2]
+    xyz_rot[..., 0] = xyz[..., 0]
+    xyz_rot[..., 1] = np.cos(rot_x) * xyz[..., 1] - np.sin(rot_x) * xyz[..., 2]
+    xyz_rot[..., 2] = np.sin(rot_x) * xyz[..., 1] + np.cos(rot_x) * xyz[..., 2]
     # get rotated uv matrix
     uv_rot = xyz2uv(xyz_rot)
 
@@ -144,14 +139,14 @@ def uv2img_idx(uv, h, w, u_fov, v_fov, rot_x=0, rot_y=0, rot_z=0):
 
     invalid = (u < -u_fov / 2) | (u > u_fov / 2) |\
               (v < -v_fov / 2) | (v > v_fov / 2)
-    x[invalid] = -100
-    y[invalid] = -100
+    x[invalid] = -1
+    y[invalid] = -1
 
     return np.stack([y, x], axis=0)
 
 
 class OmniDataset(data.Dataset):
-    def __init__(self, dataset, fov=120, outshape=(300, 300),
+    def __init__(self, dataset, fov=120, outshape=(300, 600),
                  z_rotate=True, y_rotate=True, x_rotate=True,
                  fix_aug=True):
         '''
@@ -170,9 +165,9 @@ class OmniDataset(data.Dataset):
         if fix_aug:
             self.aug = [
                 {
-                    'z_rotate': 0,#np.random.uniform(-np.pi, np.pi),
-                    'y_rotate': 0,#np.random.uniform(-np.pi, np.pi),
-                    'x_rotate': 0,#np.random.uniform(-np.pi, np.pi),
+                    'z_rotate': np.pi/8,#np.random.uniform(-np.pi, np.pi),
+                    'y_rotate': np.pi/8,#np.random.uniform(-np.pi/2, np.pi/2),
+                    'x_rotate': np.pi/8,#np.random.uniform(-np.pi, np.pi),
                 }
                 for _ in range(len(self.dataset))
             ]
@@ -225,8 +220,31 @@ class OmniDataset(data.Dataset):
 
         new_bboxes = []
         for xmin,ymin,xmax,ymax,ac_type in bboxes:
-            new_bboxes.append([xmin,ymin,xmax,ymax,
-                                rot_x/np.pi/2+0.5,rot_y/np.pi/2+0.5,rot_z/np.pi/2+0.5,ac_type])
+            umin = np.arctan((xmin-0.5)*2*1.7321)
+            umax = np.arctan((xmax-0.5)*2*1.7321)
+
+            all_v = []
+            all_v += [np.arctan2(ymin-0.5,np.sqrt(1./12+(xmin-0.5)**2))]
+            all_v += [np.arctan2(ymin-0.5,np.sqrt(1./12+(xmax-0.5)**2))]
+            all_v += [np.arctan2(ymax-0.5,np.sqrt(1./12+(xmin-0.5)**2))]
+            all_v += [np.arctan2(ymax-0.5,np.sqrt(1./12+(xmax-0.5)**2))]
+            if xmin <= 0.5 and xmax >= 0.5:
+                all_v += [np.arctan2(ymin-0.5,np.sqrt(1./12))]
+                all_v += [np.arctan2(ymax-0.5,np.sqrt(1./12))]
+
+            umin,umax = umin/2/np.pi+0.5,umax/2/np.pi+0.5
+            vmin,vmax = min(all_v)/np.pi+0.5,max(all_v)/np.pi+0.5
+
+            h,w = vmax-vmin,umax-umin
+            cu,cv = (umax+umin)/2-rot_z/2/np.pi,(vmax+vmin)/2-rot_y/np.pi
+            cu = cu%1
+            if cv > 1:
+                cv = 2 - cv
+                cu = cu-0.5 if cu>=0.5 else cu+0.5
+            elif cv < 0:
+                cv = -cv
+                cu = cu-0.5 if cu>=0.5 else cu+0.5
+            new_bboxes.append([cu,cv,h,w,rot_x/np.pi/2+0.5,ac_type])
         bboxes = new_bboxes
 
         return bboxes
@@ -332,4 +350,10 @@ if __name__ == '__main__':
 
         print(path, label)
         img = Image.fromarray(x.permute(1, 2, 0).numpy().astype(np.uint8))
+        from PIL import ImageDraw
+        draw = ImageDraw.Draw(img)
+        for cu,cv,h,w,rot_x,ac_type in label:
+            l,r = (cu-w/2)*600,(cu+w/2)*600
+            t,b = (cv-h/2)*300,(cv+h/2)*300
+            draw.rectangle(((l,t), (r,b)), fill="black")
         img.save(path)

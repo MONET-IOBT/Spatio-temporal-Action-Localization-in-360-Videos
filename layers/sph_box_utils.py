@@ -88,9 +88,6 @@ def get_region(u,v,x,y,fov,bbox):
 
 
 def iou(bbox1,bbox2,fov=np.pi/3,use_precompute=False):
-    # if use_precompute:
-    #     exit(0)
-    # else:
     # get region of the first box
     u1,v1,x1,y1 = get_rotated_mat(bbox1,fov)
     valid1 = get_region(u1,v1,x1,y1,fov,bbox1)
