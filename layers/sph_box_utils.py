@@ -18,7 +18,7 @@ def point_form(boxes):
     """
     return torch.cat((boxes[:, :2] - boxes[:, 2:4]/2,     # xmin, ymin
                      boxes[:, :2] + boxes[:, 2:4]/2,      # xmax, ymax
-                     boxes[:,4:]), 1)  
+                     boxes[:,4:]), 1)
 
 def distance(box_a, box_b):
     A = box_a.size(0)
@@ -94,8 +94,6 @@ def sph_match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, 
     Return:
         The matched indices corresponding to 1)location and 2)confidence preds.
     """
-
-    
     # dist = distance(truths,priors)
     # min_dist,_ = dist.min(1, keepdim=True)
     # mask1 = min_dist.expand_as(dist).eq(dist)
@@ -107,7 +105,7 @@ def sph_match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, 
     # print(point_form(priors)[mask.squeeze(0),:])
 
     overlaps = jaccard(
-        point_form(truths),
+        truths,
         point_form(priors)
     )
     overlaps = overlaps * torch.cos(drot)
@@ -146,7 +144,6 @@ def encode(matched, priors, variances):
     Return:
         encoded boxes (tensor), Shape: [num_priors, 4]
     """
-
     # dist b/t match center and prior's center
     g_cxcy = (matched[:, :2] + matched[:, 2:4])/2 - priors[:, :2]
     # encode variance
@@ -155,7 +152,7 @@ def encode(matched, priors, variances):
     g_wh = (matched[:, 2:4] - matched[:, :2]) / priors[:, 2:4]
     g_wh = torch.log(g_wh) / variances[1]
     # return target for smooth_l1_loss
-    return torch.cat([g_cxcy, g_wh, matched[:,4:]], 1)  # [num_priors,7]
+    return torch.cat([g_cxcy, g_wh, matched[:,4:]], 1)  # [num_priors,5]
 
 
 # Adapted from https://github.com/Hakuyume/chainer-ssd

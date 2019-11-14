@@ -190,7 +190,7 @@ def train(args, net, optimizer, criterion, scheduler):
             if args.cuda:
                 images = images.cuda(0, non_blocking=True)
                 targets = [anno.cuda(0, non_blocking=True) for anno in targets]
-                
+
             # forward
             out = net(images)
             # backprop
@@ -292,7 +292,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
 
             if args.cuda:
                 images = images.cuda(0, non_blocking=True)
-            
+
             output = net(images)
 
             loc_data = output[0]
@@ -303,7 +303,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                 torch.cuda.synchronize()
                 tf = time.perf_counter()
                 print('Forward Time {:0.3f}'.format(tf-t1))
-            
+
             for b in range(batch_size):
                 gt = targets[b].numpy()
                 gt[:,0] *= width

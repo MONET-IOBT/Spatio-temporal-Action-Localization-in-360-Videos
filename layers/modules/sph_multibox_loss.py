@@ -69,7 +69,7 @@ class SphMultiBoxLoss(nn.Module):
                 loc_t = torch.Tensor(num, num_priors, 5)
                 conf_t = torch.LongTensor(num, num_priors)
             for idx in range(num):
-                truths = targets[idx][:, :-1].data # box annotation 
+                truths = targets[idx][:, :-1].data # box annotation
                 labels = targets[idx][:, -1].data # action type
                 defaults = priors.data
                 sph_match(self.threshold, truths, defaults, self.variance, labels,

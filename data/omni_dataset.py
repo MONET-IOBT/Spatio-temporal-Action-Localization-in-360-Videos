@@ -60,7 +60,7 @@ def get_rotated_mat(outshape,inshape,rot_x,rot_y,rot_z,fov):
     xyz_rot[..., 0] = np.cos(rot_z) * xyz[..., 0] - np.sin(rot_z) * xyz[..., 1]
     xyz_rot[..., 1] = np.sin(rot_z) * xyz[..., 0] + np.cos(rot_z) * xyz[..., 1]
     xyz_rot[..., 2] = xyz[..., 2]
-    
+
     # get rotated uv matrix
     uv_rot = xyz2uv(xyz_rot)
 
@@ -108,13 +108,13 @@ def IoU(bbox1,bbox2,outshape=(300,600),inshape=(300,300),fov=np.pi/3):
 def uv2img_idx(uv, h, w, u_fov, v_fov, rot_x=0, rot_y=0, rot_z=0):
     # the coord on sphere of each pixel in the output image
     xyz = uv2xyz(uv.astype(np.float64)) # out_h, out_w, (x,y,z)
-    
+
     # rotate along z-axis
     xyz_rot = xyz.copy()
     xyz_rot[..., 0] = np.cos(rot_z) * xyz[..., 0] - np.sin(rot_z) * xyz[..., 1]
     xyz_rot[..., 1] = np.sin(rot_z) * xyz[..., 0] + np.cos(rot_z) * xyz[..., 1]
     xyz_rot[..., 2] = xyz[..., 2]
-    xyz = xyz_rot.copy() 
+    xyz = xyz_rot.copy()
     # rotate along y-axis
     xyz_rot = xyz.copy()
     xyz_rot[..., 0] = np.cos(rot_y) * xyz[..., 0] - np.sin(rot_y) * xyz[..., 2]
@@ -244,7 +244,7 @@ class OmniDataset(data.Dataset):
             elif cv < 0:
                 cv = -cv
                 cu = cu-0.5 if cu>=0.5 else cu+0.5
-            new_bboxes.append([cu,cv,w,h,rot_x/np.pi/2+0.5,ac_type])
+            new_bboxes.append([cu-w/2,cv-h/2,cu+w/2,cv+h/2,rot_x/np.pi/2+0.5,ac_type])
         bboxes = new_bboxes
 
         return bboxes
@@ -252,7 +252,7 @@ class OmniDataset(data.Dataset):
 
     def _get_img(self, idx, rot_x, rot_y, rot_z, ch = None):
         # get image content from one channel
-        
+
         if ch is None:
             img = np.array(self.dataset[idx][0], np.float32)
         else:
@@ -272,7 +272,7 @@ from data import UCF24Detection, AnnotationTransform
 class OmniUCF24(OmniDataset):
     def __init__(self, root, image_set, transform=None, target_transform=None,
                  dataset_name='ucf24', input_type='rgb', full_test=False, *args, **kwargs):
-        self.UCF24 = UCF24Detection(root, image_set, transform, target_transform, 
+        self.UCF24 = UCF24Detection(root, image_set, transform, target_transform,
                                     dataset_name, input_type, full_test)
         super(OmniUCF24, self).__init__(self.UCF24, *args, **kwargs)
 
@@ -321,9 +321,9 @@ if __name__ == '__main__':
     parser.add_argument('--fix_aug', action='store_true',
                         help='whether to apply random panorama vertical rotation')
 
-    parser.add_argument('--ssd_dim', default=300, type=int, 
+    parser.add_argument('--ssd_dim', default=300, type=int,
                         help='Input Size for SSD') # only support 300 now
-    parser.add_argument('--input_type', default='rgb', type=str, 
+    parser.add_argument('--input_type', default='rgb', type=str,
                         help='INput tyep default rgb options are [rgb,brox,fastOF]')
     args = parser.parse_args()
 
@@ -352,8 +352,8 @@ if __name__ == '__main__':
         img = Image.fromarray(x.permute(1, 2, 0).numpy().astype(np.uint8))
         from PIL import ImageDraw
         draw = ImageDraw.Draw(img)
-        for cu,cv,w,h,rot_x,ac_type in label:
-            l,r = (cu-w/2)*600,(cu+w/2)*600
-            t,b = (cv-h/2)*300,(cv+h/2)*300
+        for l,t,r,b,rot_x,ac_type in label:
+            l,r = l*600,r*600
+            t,b = t*300,b*300
             draw.rectangle(((l,t), (r,b)), fill="black")
         img.save(path)
