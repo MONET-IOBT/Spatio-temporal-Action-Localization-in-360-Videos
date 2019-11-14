@@ -165,9 +165,9 @@ class OmniDataset(data.Dataset):
         if fix_aug:
             self.aug = [
                 {
-                    'z_rotate': np.pi/8,#np.random.uniform(-np.pi, np.pi),
-                    'y_rotate': np.pi/8,#np.random.uniform(-np.pi/2, np.pi/2),
-                    'x_rotate': np.pi/8,#np.random.uniform(-np.pi, np.pi),
+                    'z_rotate': np.pi/4,#np.random.uniform(-np.pi, np.pi),
+                    'y_rotate': np.pi/4,#np.random.uniform(-np.pi/2, np.pi/2),
+                    'x_rotate': np.pi/4,#np.random.uniform(-np.pi, np.pi),
                 }
                 for _ in range(len(self.dataset))
             ]
@@ -244,7 +244,7 @@ class OmniDataset(data.Dataset):
             elif cv < 0:
                 cv = -cv
                 cu = cu-0.5 if cu>=0.5 else cu+0.5
-            new_bboxes.append([cu,cv,h,w,rot_x/np.pi/2+0.5,ac_type])
+            new_bboxes.append([cu,cv,w,h,rot_x/np.pi/2+0.5,ac_type])
         bboxes = new_bboxes
 
         return bboxes
@@ -352,7 +352,7 @@ if __name__ == '__main__':
         img = Image.fromarray(x.permute(1, 2, 0).numpy().astype(np.uint8))
         from PIL import ImageDraw
         draw = ImageDraw.Draw(img)
-        for cu,cv,h,w,rot_x,ac_type in label:
+        for cu,cv,w,h,rot_x,ac_type in label:
             l,r = (cu-w/2)*600,(cu+w/2)*600
             t,b = (cv-h/2)*300,(cv+h/2)*300
             draw.rectangle(((l,t), (r,b)), fill="black")

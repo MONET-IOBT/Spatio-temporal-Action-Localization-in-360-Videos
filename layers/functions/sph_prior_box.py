@@ -47,25 +47,28 @@ class SphPriorBox(object):
                 for i in range(h):
                     for j in range(w):
                         boxes = []
-                        f_k = self.image_size / self.steps[k]
+                        f_kx = self.image_size[1] * 1. / self.steps[k][1]
+                        f_ky = self.image_size[0] * 1. / self.steps[k][0]
                         # unit center x,y
-                        cx = (j + 0.5) / f_k
-                        cy = (i + 0.5) / f_k
+                        cx = (j + 0.5) / f_kx
+                        cy = (i + 0.5) / f_ky
 
                         # aspect_ratio: 1
                         # rel size: min_size
-                        s_k = self.min_sizes[k]/self.image_size
-                        boxes.append([cx, cy, s_k, s_k])
+                        s_kx = self.min_sizes[k] * 1. /self.image_size[1]
+                        s_ky = self.min_sizes[k] * 1. /self.image_size[0]
+                        boxes.append([cx, cy, s_kx, s_ky])
 
                         # aspect_ratio: 1
                         # rel size: sqrt(s_k * s_(k+1))
-                        s_k_prime = sqrt(s_k * (self.max_sizes[k]/self.image_size))
-                        boxes.append([cx, cy, s_k_prime, s_k_prime])
+                        s_kx_prime = sqrt(s_kx * (self.max_sizes[k] * 1. /self.image_size[1]))
+                        s_ky_prime = sqrt(s_ky * (self.max_sizes[k] * 1. /self.image_size[0]))
+                        boxes.append([cx, cy, s_kx_prime, s_ky_prime])
 
                         # rest of aspect ratios
                         for ar in self.aspect_ratios[k]:
-                            boxes.append([cx, cy, s_k*sqrt(ar), s_k/sqrt(ar)])
-                            boxes.append([cx, cy, s_k/sqrt(ar), s_k*sqrt(ar)])
+                            boxes.append([cx, cy, s_kx*sqrt(ar), s_ky/sqrt(ar)])
+                            boxes.append([cx, cy, s_kx/sqrt(ar), s_ky*sqrt(ar)])
 
                         # add rotation to all boxes
                         for cx,cy,sx,sy in boxes:

@@ -8,99 +8,6 @@ https://github.com/amdegroot/ssd.pytorch
 import torch
 import numpy as np
 
-
-def genuv(h, w):
-    v, u = torch.meshgrid(torch.arange(h), torch.arange(w))
-    u = u.type(torch.FloatTensor)
-    v = v.type(torch.FloatTensor)
-    u = (u + 0.5) * 2 * np.pi / w - np.pi
-    v = (v + 0.5) * np.pi / h - np.pi / 2
-    return torch.stack([u, v], dim=-1)
-
-def uv2xyz(uv):
-    sin_u = torch.sin(uv[..., 0])
-    cos_u = torch.cos(uv[..., 0])
-    sin_v = torch.sin(uv[..., 1])
-    cos_v = torch.cos(uv[..., 1])
-    return torch.stack([
-        cos_v * cos_u,
-        cos_v * sin_u,
-        sin_v
-    ], dim=-1)
-
-def xyz2uv(xyz):
-    c = torch.sqrt((xyz[..., :2] ** 2).sum(-1))
-    u = torch.atan2(xyz[..., 1], xyz[..., 0])
-    v = torch.atan2(xyz[..., 2], c)
-    return torch.stack([u, v], dim=-1)
-
-def get_rotated_mat(bbox,fov,outshape=(300,300)):
-    xmin,ymin,xmax,ymax,rot_x,rot_y,rot_z = bbox
-    uv = genuv(*outshape)
-    xyz = uv2xyz(uv)
-
-    # convert rotation to rad
-    rot_x = np.pi*2*rot_x - np.pi
-    rot_y = np.pi*2*rot_y - np.pi
-    rot_z = np.pi*2*rot_z - np.pi
-    # rotate along x-axis
-    xyz_rot = xyz.clone().detach()
-    xyz_rot[..., 0] = xyz[..., 0]
-    xyz_rot[..., 1] = torch.cos(rot_x) * xyz[..., 1] - torch.sin(rot_x) * xyz[..., 2]
-    xyz_rot[..., 2] = torch.sin(rot_x) * xyz[..., 1] + torch.cos(rot_x) * xyz[..., 2]
-    xyz = xyz_rot.clone().detach()
-    # rotate along y-axis
-    xyz_rot = xyz.clone().detach()
-    xyz_rot[..., 0] = torch.cos(rot_y) * xyz[..., 0] - torch.sin(rot_y) * xyz[..., 2]
-    xyz_rot[..., 1] = xyz[..., 1]
-    xyz_rot[..., 2] = torch.sin(rot_y) * xyz[..., 0] + torch.cos(rot_y) * xyz[..., 2]
-    xyz = xyz_rot.clone().detach()
-    # rotate along z-axis
-    xyz_rot = xyz.clone().detach()
-    xyz_rot[..., 0] = torch.cos(rot_z) * xyz[..., 0] - torch.sin(rot_z) * xyz[..., 1]
-    xyz_rot[..., 1] = torch.sin(rot_z) * xyz[..., 0] + torch.cos(rot_z) * xyz[..., 1]
-    xyz_rot[..., 2] = xyz[..., 2]
-    # get rotated uv matrix
-    uv_rot = xyz2uv(xyz_rot)
-
-    u = uv_rot[..., 0]
-    v = uv_rot[..., 1]
-
-    x = torch.tan(u)
-    y = torch.tan(v) / torch.cos(u)
-    x = x / (2 * torch.tan(torch.FloatTensor([fov / 2]))) + 0.5
-    y = y / (2 * torch.tan(torch.FloatTensor([fov / 2]))) + 0.5
-
-    return u,v,x,y
-
-def get_region(u,v,x,y,fov,bbox):
-    xmin,ymin,xmax,ymax,rot_x,rot_y,rot_z = bbox
-    invalid = (u < -fov / 2) | (u > fov / 2) |\
-              (v < -fov / 2) | (v > fov / 2)
-    x[invalid] = -1
-    y[invalid] = -1
-
-    x = x.cuda()
-    y = y.cuda()
-
-    valid = (x >= xmin) & (x <= xmax) & (y >= ymin) & (y <= ymax)
-    return valid
-
-
-def iou(bbox1,bbox2,fov=np.pi/3,use_precompute=False):
-    # get region of the first box
-    u1,v1,x1,y1 = get_rotated_mat(bbox1,fov)
-    valid1 = get_region(u1,v1,x1,y1,fov,bbox1)
-
-    # get region of the second box
-    u2,v2,x2,y2 = get_rotated_mat(bbox2,fov)
-    valid2 = get_region(u2,v2,x2,y2,fov,bbox2)
-
-    intersec = sum(sum(valid1&valid2))
-    union = sum(sum(valid1|valid2))
-
-    return intersec/union
-
 def point_form(boxes):
     """ Convert prior_boxes to (xmin, ymin, xmax, ymax)
     representation for comparison to point form ground truth data.
@@ -113,7 +20,43 @@ def point_form(boxes):
                      boxes[:, :2] + boxes[:, 2:4]/2,      # xmax, ymax
                      boxes[:,4:]), 1)  
 
-def jaccard(box_a, box_b, use_gpu):
+def distance(box_a, box_b):
+    A = box_a.size(0)
+    B = box_b.size(0)
+    dist_x = box_a[:, 0].unsqueeze(1).expand(A, B) - box_b[:, 0].unsqueeze(0).expand(A, B)
+    dist_y = box_a[:, 1].unsqueeze(1).expand(A, B) - box_b[:, 1].unsqueeze(0).expand(A, B)
+    return dist_x*dist_x + dist_y*dist_y
+
+def delta_rotation(box_a, box_b):
+    A = box_a.size(0)
+    B = box_b.size(0)
+    rot_x = box_a[:, 4].unsqueeze(1).expand(A, B)
+    rot_y = box_b[:, 4].unsqueeze(0).expand(A, B)
+    delta = rot_x - rot_y
+    return delta
+
+def intersect(box_a, box_b):
+    """ We resize both tensors to [A,B,2] without new malloc:
+    [A,2] -> [A,1,2] -> [A,B,2]
+    [B,2] -> [1,B,2] -> [A,B,2]
+    Then we compute the area of intersect between box_a and box_b.
+    Args:
+      box_a: (tensor) bounding boxes, Shape: [A,4].
+      box_b: (tensor) bounding boxes, Shape: [B,4].
+    Return:
+      (tensor) intersection area, Shape: [A,B].
+    """
+    A = box_a.size(0)
+    B = box_b.size(0)
+    max_xy = torch.min(box_a[:, 2:4].unsqueeze(1).expand(A, B, 2),
+                       box_b[:, 2:4].unsqueeze(0).expand(A, B, 2))
+    min_xy = torch.max(box_a[:, :2].unsqueeze(1).expand(A, B, 2),
+                       box_b[:, :2].unsqueeze(0).expand(A, B, 2))
+    inter = torch.clamp((max_xy - min_xy), min=0)
+    return inter[:, :, 0] * inter[:, :, 1]
+
+
+def jaccard(box_a, box_b):
     """Compute the jaccard overlap of two sets of boxes.  The jaccard overlap
     is simply the intersection over union of two boxes.  Here we operate on
     ground truth boxes and default boxes.
@@ -125,19 +68,13 @@ def jaccard(box_a, box_b, use_gpu):
     Return:
         jaccard overlap: (tensor) Shape: [box_a.size(0), box_b.size(0)]
     """
-    A = box_a.size(0)
-    B = box_b.size(0)
-    if use_gpu:
-        IoU = torch.cuda.FloatTensor(A, B)
-    else:
-        IoU = torch.Tensor(A, B)
-
-    for i in range(A):
-        for j in range(B):
-            print(i,j)
-            IoU[i][j] = iou(box_a[i],box_b[j])
-    
-    return IoU
+    inter = intersect(box_a, box_b)
+    area_a = ((box_a[:, 2]-box_a[:, 0]) *
+              (box_a[:, 3]-box_a[:, 1])).unsqueeze(1).expand_as(inter)  # [A,B]
+    area_b = ((box_b[:, 2]-box_b[:, 0]) *
+              (box_b[:, 3]-box_b[:, 1])).unsqueeze(0).expand_as(inter)  # [A,B]
+    union = area_a + area_b - inter
+    return inter / union  # [A,B]
 
 
 def sph_match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, use_gpu):
@@ -157,13 +94,24 @@ def sph_match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, 
     Return:
         The matched indices corresponding to 1)location and 2)confidence preds.
     """
-    # jaccard index
-    print(truths)
+
+    
+    # dist = distance(truths,priors)
+    # min_dist,_ = dist.min(1, keepdim=True)
+    # mask1 = min_dist.expand_as(dist).eq(dist)
+
+    drot = delta_rotation(truths,priors)
+    # min_drot,_ = drot.min(1, keepdim=True)
+    # mask2 = min_drot.expand_as(drot).eq(drot)
+    # mask = mask1 & mask2
+    # print(point_form(priors)[mask.squeeze(0),:])
+
     overlaps = jaccard(
-        truths,
-        point_form(priors),
-        use_gpu
+        point_form(truths),
+        point_form(priors)
     )
+    overlaps = overlaps * torch.cos(drot)
+
     # (Bipartite Matching)
     # [1,num_objects] best prior for each ground truth
     best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
@@ -178,11 +126,11 @@ def sph_match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, 
     # ensure every gt matches with its prior of max overlap
     for j in range(best_prior_idx.size(0)):
         best_truth_idx[best_prior_idx[j]] = j
-    matches = truths[best_truth_idx]          # Shape: [num_priors,7]
+    matches = truths[best_truth_idx]          # Shape: [num_priors,5]
     conf = labels[best_truth_idx] + 1         # Shape: [num_priors]
     conf[best_truth_overlap < threshold] = 0  # label as background
     loc = encode(matches, priors, variances)
-    loc_t[idx] = loc    # [num_priors,7] encoded offsets to learn
+    loc_t[idx] = loc    # [num_priors,5] encoded offsets to learn
     conf_t[idx] = conf  # [num_priors] top class label for each prior
 
 
@@ -223,14 +171,13 @@ def decode(loc, priors, variances):
     Return:
         decoded bounding box predictions
     """
-    print("decode not implemented in sph_box_utils.py")
-    exit(0)
 
     boxes = torch.cat((
-        priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:],
-        priors[:, 2:] * torch.exp(loc[:, 2:] * variances[1])), 1)
-    boxes[:, :2] -= boxes[:, 2:] / 2
-    boxes[:, 2:] += boxes[:, :2]
+        priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:4],
+        priors[:, 2:4] * torch.exp(loc[:, 2:4] * variances[1]),
+        priors[:, 4]), 1)
+    boxes[:, :2] -= boxes[:, 2:4] / 2
+    boxes[:, 2:4] += boxes[:, :2]
     return boxes
 
 
@@ -274,7 +221,8 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
     y1 = boxes[:, 1]
     x2 = boxes[:, 2]
     y2 = boxes[:, 3]
-    area = torch.mul(x2 - x1, y2 - y1)
+    alpha = boxes[:, 4]
+    area = torch.mul(x2 - x1, y2 - y1) * torch.cos(alpha)
     v, idx = scores.sort(0)  # sort in ascending order
     # I = I[v >= 0.01]
     idx = idx[-top_k:]  # indices of the top-k largest vals
@@ -282,6 +230,7 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
     yy1 = boxes.new()
     xx2 = boxes.new()
     yy2 = boxes.new()
+    alpha2 = boxes.new()
     w = boxes.new()
     h = boxes.new()
 
@@ -305,6 +254,7 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
         yy1 = torch.clamp(yy1, min=y1[i])
         xx2 = torch.clamp(xx2, max=x2[i])
         yy2 = torch.clamp(yy2, max=y2[i])
+        alpha2 = alpha2 - alpha[i]
         w.resize_as_(xx2)
         h.resize_as_(yy2)
         w = xx2 - xx1
@@ -312,7 +262,7 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
         # check sizes of xx1 and xx2.. after each iteration
         w = torch.clamp(w, min=0.0)
         h = torch.clamp(h, min=0.0)
-        inter = w*h
+        inter = w*h*torch.cos(alpha2)
         # IoU = i / (area(a) + area(b) - i)
         rem_areas = torch.index_select(area, 0, idx)  # load remaining areas)
         union = (rem_areas - inter) + area[i]

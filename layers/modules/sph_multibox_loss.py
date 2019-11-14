@@ -48,11 +48,11 @@ class SphMultiBoxLoss(nn.Module):
             predictions (tuple): A tuple containing loc preds, conf preds,
             and prior boxes from SSD net.
                 conf shape: torch.size(batch_size,num_priors,num_classes)
-                loc shape: torch.size(batch_size,num_priors,7)
-                priors shape: torch.size(num_priors,7)
+                loc shape: torch.size(batch_size,num_priors,5)
+                priors shape: torch.size(num_priors,5)
 
             ground_truth (tensor): Ground truth boxes and labels for a batch,
-                shape: [batch_size,num_objs,8] (last idx is the label).
+                shape: [batch_size,num_objs,6] (last idx is the label).
         """
         loc_data, conf_data, priors = predictions
         num = loc_data.size(0)
@@ -63,10 +63,10 @@ class SphMultiBoxLoss(nn.Module):
         # match priors (default boxes) and ground truth boxes
         with torch.no_grad():
             if self.use_gpu:
-                loc_t = torch.cuda.FloatTensor(num, num_priors, 7)
+                loc_t = torch.cuda.FloatTensor(num, num_priors, 5)
                 conf_t = torch.cuda.LongTensor(num, num_priors)
             else:
-                loc_t = torch.Tensor(num, num_priors, 7)
+                loc_t = torch.Tensor(num, num_priors, 5)
                 conf_t = torch.LongTensor(num, num_priors)
             for idx in range(num):
                 truths = targets[idx][:, :-1].data # box annotation 
@@ -88,8 +88,8 @@ class SphMultiBoxLoss(nn.Module):
         # Shape: [batch,num_priors,4]
         # only extract positive/foreground samples
         pos_idx = pos.unsqueeze(pos.dim()).expand_as(loc_data)
-        loc_p = loc_data[pos_idx].view(-1, 7)
-        loc_t = loc_t[pos_idx].view(-1, 7)
+        loc_p = loc_data[pos_idx].view(-1, 5)
+        loc_t = loc_t[pos_idx].view(-1, 5)
         loss_l = F.smooth_l1_loss(loc_p, loc_t, reduction='sum')
         with torch.no_grad():
             # Compute max conf across batch for hard negative mining
