@@ -56,7 +56,7 @@ parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom t
 parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom Server')
 parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
 parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
-parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
+parser.add_argument('--iou_thresh', default=0.1, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
@@ -81,7 +81,7 @@ def main():
     args.num_classes = num_classes
     args.stepvalues = [int(val) for val in args.stepvalues.split(',')]
     args.loss_reset_step = 30
-    args.eval_step = 10000
+    args.eval_step = 5000
     args.print_step = 10
 
     ## Define the experiment Name will used to same directory and ENV for visdom
@@ -349,7 +349,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                     #     boxes[ik, 3] = min(height, boxes[ik, 3])
 
                     cls_dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=True)
-
+                    
                     det_boxes[cl_ind-1].append(cls_dets)
                 count += 1
             if val_itr%val_step == 0:
@@ -362,6 +362,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                 torch.cuda.synchronize()
                 te = time.perf_counter()
                 print('NMS stuff Time {:0.3f}'.format(te - tf))
+
     print('Evaluating detections for itration number ', iteration_num)
     return evaluate_detections(gt_boxes, det_boxes, CLASSES, iou_thresh=iou_thresh)
 

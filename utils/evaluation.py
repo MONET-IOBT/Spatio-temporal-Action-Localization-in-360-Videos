@@ -104,6 +104,7 @@ def evaluate_detections(gt_boxes, det_boxes, CLASSES=[], iou_thresh=0.5):
                             iou = compute_iou(cls_gt_boxes, box) # compute IOU between remaining gt boxes
                             # and detection boxes
                             maxid = np.argmax(iou)  # get the max IOU window gt index
+                            
                             if iou[maxid] >= iou_thresh: # check is max IOU is greater than detection threshold
                                 ispositive = True # if yes then this is ture positive detection
                                 cls_gt_boxes = np.delete(cls_gt_boxes, maxid, 0) # remove assigned gt box
@@ -112,8 +113,7 @@ def evaluate_detections(gt_boxes, det_boxes, CLASSES=[], iou_thresh=0.5):
                             istp[det_count] = 1 # set current detection index (det_count)
                             #  to 1 if it is true postive example
                         det_count += 1
-        if num_postives<1:
-            num_postives =1
+        
         scores = scores[:det_count]
         istp = istp[:det_count]
         argsort_scores = np.argsort(-scores) # sort in descending order
@@ -122,7 +122,7 @@ def evaluate_detections(gt_boxes, det_boxes, CLASSES=[], iou_thresh=0.5):
         tp = np.cumsum(istp == 1) # get  true positives
         fp = fp.astype(np.float64)
         tp = tp.astype(np.float64)
-        recall = tp / float(num_postives) # compute recall
+        recall = tp / float(num_postives+1) # compute recall
         precision = tp / np.maximum(tp + fp, np.finfo(np.float64).eps) # compute precision
         cls_ap = voc_ap(recall, precision) # compute average precision using voc2007 metric
         ap_all[cls_ind] = cls_ap
