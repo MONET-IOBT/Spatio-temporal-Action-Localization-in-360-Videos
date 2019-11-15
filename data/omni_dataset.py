@@ -165,9 +165,9 @@ class OmniDataset(data.Dataset):
         if fix_aug:
             self.aug = [
                 {
-                    'z_rotate': np.pi/4,#np.random.uniform(-np.pi, np.pi),
-                    'y_rotate': np.pi/4,#np.random.uniform(-np.pi/2, np.pi/2),
-                    'x_rotate': np.pi/4,#np.random.uniform(-np.pi, np.pi),
+                    'z_rotate': np.random.uniform(-np.pi, np.pi),
+                    'y_rotate': np.random.uniform(-np.pi/2, np.pi/2),
+                    'x_rotate': np.random.uniform(-np.pi, np.pi),
                 }
                 for _ in range(len(self.dataset))
             ]

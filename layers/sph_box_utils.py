@@ -172,7 +172,7 @@ def decode(loc, priors, variances):
     boxes = torch.cat((
         priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:4],
         priors[:, 2:4] * torch.exp(loc[:, 2:4] * variances[1]),
-        priors[:, 4]), 1)
+        priors[:, 4].unsqueeze(1)), 1)
     boxes[:, :2] -= boxes[:, 2:4] / 2
     boxes[:, 2:4] += boxes[:, :2]
     return boxes
@@ -208,8 +208,6 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
     # 3. calculate IoU of remaining box and the top-1 box
     # 4. keep the remaining box with IoU >= threshold
     # 5. go to step 1 until no remaining box
-    print('nms not implemented in sph_box_utils.py')
-    exit(0)
 
     keep = scores.new(scores.size(0)).zero_().long()
     if boxes.numel() == 0:
@@ -246,7 +244,9 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
         torch.index_select(y1, 0, idx, out=yy1)
         torch.index_select(x2, 0, idx, out=xx2)
         torch.index_select(y2, 0, idx, out=yy2)
+        torch.index_select(alpha, 0, idx, out=alpha2)
         # store element-wise max with next highest score
+        # find intersection
         xx1 = torch.clamp(xx1, min=x1[i])
         yy1 = torch.clamp(yy1, min=y1[i])
         xx2 = torch.clamp(xx2, max=x2[i])

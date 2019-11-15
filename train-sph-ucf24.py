@@ -17,7 +17,7 @@ import torch.optim as optim
 import torch.nn.init as init
 import argparse
 import torch.utils.data as data
-from data import v2, AnnotationTransform, CLASSES, BaseTransform
+from data import sph_v2, AnnotationTransform, CLASSES, BaseTransform
 from data.omni_dataset import OmniUCF24, sph_detection_collate
 from utils.augmentations import SSDAugmentation
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
@@ -25,7 +25,7 @@ from sph_ssd import build_sph_ssd
 import numpy as np
 import time
 from utils.evaluation import evaluate_detections
-from layers.box_utils import decode, nms
+from layers.sph_box_utils import decode, nms
 from utils import  AverageMeter
 from torch.optim.lr_scheduler import MultiStepLR
 
@@ -40,7 +40,7 @@ parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=300, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=16, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=10, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=4, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--max_iter', default=120000, type=int, help='Number of training iterations')
@@ -74,7 +74,7 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 
 def main():
-    args.cfg = 'sph_v2'
+    args.cfg = sph_v2
     args.train_sets = 'train'
     args.means = (104, 117, 123)
     num_classes = len(CLASSES) + 1
@@ -175,7 +175,7 @@ def train(args, net, optimizer, criterion, scheduler):
     batch_iterator = None
     train_data_loader = data.DataLoader(train_dataset, args.batch_size, num_workers=args.num_workers,
                                   shuffle=True, collate_fn=sph_detection_collate, pin_memory=True)
-    val_data_loader = data.DataLoader(val_dataset, args.batch_size, num_workers=args.num_workers,
+    val_data_loader = data.DataLoader(val_dataset, 32, num_workers=args.num_workers,
                                  shuffle=False, collate_fn=sph_detection_collate, pin_memory=True)
     itr_count = 0
     torch.cuda.synchronize()
@@ -305,17 +305,21 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                 print('Forward Time {:0.3f}'.format(tf-t1))
 
             for b in range(batch_size):
+                # get the boxes of each image
                 gt = targets[b].numpy()
                 gt[:,0] *= width
                 gt[:,2] *= width
                 gt[:,1] *= height
                 gt[:,3] *= height
+                gt[:,4] = np.pi*2*gt[:,4] - np.pi
                 gt_boxes.append(gt)
+                # obtain the actual prediction in point form
                 decoded_boxes = decode(loc_data[b].data, prior_data.data, args.cfg['variance']).clone()
                 conf_scores = net.softmax(conf_preds[b]).data.clone()
                 # print(conf_scores.sum(1), conf_scores.shape)
+                # num_classes = 1 + len(CLASS)
                 for cl_ind in range(1, num_classes):
-                    scores = conf_scores[:, cl_ind].squeeze()
+                    scores = conf_scores[:, cl_ind].squeeze() # [num_priors,]
                     c_mask = scores.gt(args.conf_thresh)  # greater than minmum threshold
                     scores = scores[c_mask].squeeze()
                     # print('scores size',scores.size())
@@ -323,11 +327,12 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                         # print(len(''), ' dim ==0 ')
                         det_boxes[cl_ind - 1].append(np.asarray([]))
                         continue
-                    boxes = decoded_boxes.clone()
+                    boxes = decoded_boxes.clone() # [num_priors, 5]
                     l_mask = c_mask.unsqueeze(1).expand_as(boxes)
-                    boxes = boxes[l_mask].view(-1, 4)
+                    boxes = boxes[l_mask].view(-1, 5) # the boxes with score higher than threshold
                     # idx of highest scoring and non-overlapping boxes per class
                     ids, counts = nms(boxes, scores, args.nms_thresh, args.topk)  # idsn - ids after nms
+                    # remaining boxes after nms
                     scores = scores[ids[:counts]].cpu().numpy()
                     boxes = boxes[ids[:counts]].cpu().numpy()
                     # print('boxes sahpe',boxes.shape)
@@ -335,12 +340,13 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                     boxes[:,2] *= width
                     boxes[:,1] *= height
                     boxes[:,3] *= height
+                    boxes[:,4] = np.pi*2*boxes[:,4] - np.pi
 
-                    for ik in range(boxes.shape[0]):
-                        boxes[ik, 0] = max(0, boxes[ik, 0])
-                        boxes[ik, 2] = min(width, boxes[ik, 2])
-                        boxes[ik, 1] = max(0, boxes[ik, 1])
-                        boxes[ik, 3] = min(height, boxes[ik, 3])
+                    # for ik in range(boxes.shape[0]):
+                    #     boxes[ik, 0] = max(0, boxes[ik, 0])
+                    #     boxes[ik, 2] = min(width, boxes[ik, 2])
+                    #     boxes[ik, 1] = max(0, boxes[ik, 1])
+                    #     boxes[ik, 3] = min(height, boxes[ik, 3])
 
                     cls_dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=True)
 
