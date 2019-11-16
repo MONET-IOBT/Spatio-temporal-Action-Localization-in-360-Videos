@@ -11,11 +11,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-from ..layers import *
-from ..data import sph_v2
-from ..layers.functions.sph_prior_box import SphPriorBox
+import sys
+sys.path.insert(0, '/home/bo/code/realtime-action-detection')
+from layers import *
+from data import sph_v2
+from layers.functions.sph_prior_box import SphPriorBox
+from model.spherenet.sphere_cnn import SphereConv2D, SphereMaxPool2D
 import os
-from spherenet import SphereConv2D, SphereMaxPool2D
 
 
 class Sph_SSD(nn.Module):
@@ -41,7 +43,7 @@ class Sph_SSD(nn.Module):
         # TODO: implement __call__ in PriorBox
         self.priorbox = SphPriorBox(sph_v2)
         with torch.no_grad():
-            self.priors = self.priorbox.forward().cuda()
+            self.priors = self.priorbox.forward()#.cuda()
             self.num_priors = self.priors.size(0)
             self.size = 300
 
@@ -111,7 +113,6 @@ class Sph_SSD(nn.Module):
                   self.priors
                   )
         assert(output[0].shape[-2] == output[2].shape[-2])
-
         return output
 
     def load_weights(self, base_file):
@@ -165,7 +166,7 @@ def sph_vgg(cfg, i, batch_norm=False):
             in_channels = v
     pool5 = SphereMaxPool2D(kernel_size=3, stride=1)
     conv6 = SphereConv2D(512, 1024, stride=1)
-    conv7 = SphereConv2D(1024, 1024, stride=1)
+    conv7 = nn.Conv2d(1024, 1024, kernel_size=1)
     layers += [pool5, conv6,
                nn.ReLU(inplace=True), conv7, nn.ReLU(inplace=True)]
     return layers

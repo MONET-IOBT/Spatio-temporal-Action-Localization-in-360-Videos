@@ -79,6 +79,7 @@ def gen_grid_coordinates(h, w, stride=1):
     coordinates = coordinates[::-1]
     coordinates = coordinates.transpose(1, 3, 2, 4, 0)
     sz = coordinates.shape
+    # why this shape?
     coordinates = coordinates.reshape(1, sz[0]*sz[1], sz[2]*sz[3], sz[4])
 
     return coordinates.copy()
@@ -88,15 +89,15 @@ class SphereConv2D(nn.Module):
     '''  SphereConv2D
     Note that this layer only support 3x3 filter
     '''
-    def __init__(self, in_c, out_c, stride=1, bias=True, mode='bilinear'):
+    def __init__(self, in_channels, out_channels, stride=1, bias=True, mode='bilinear'):
         super(SphereConv2D, self).__init__()
-        self.in_c = in_c
-        self.out_c = out_c
+        self.in_channels = in_channels
+        self.out_channels = out_channels
         self.stride = stride
         self.mode = mode
-        self.weight = Parameter(torch.Tensor(out_c, in_c, 3, 3))
+        self.weight = Parameter(torch.Tensor(out_channels, in_channels, 3, 3))
         if bias:
-            self.bias = Parameter(torch.Tensor(out_c))
+            self.bias = Parameter(torch.Tensor(out_channels))
         else:
             self.register_parameter('bias', None)
         self.grid_shape = None
@@ -134,7 +135,7 @@ class SphereMaxPool2D(nn.Module):
         self.mode = mode
         self.grid_shape = None
         self.grid = None
-        self.pool = nn.MaxPool2d(kernel_size=kernel_size, stride=stride, ceil_mode=ceil_mode)
+        self.pool = nn.MaxPool2d(kernel_size=kernel_size, stride=3)
 
     def forward(self, x):
         if self.grid_shape is None or self.grid_shape != tuple(x.shape[2:4]):
@@ -143,7 +144,6 @@ class SphereMaxPool2D(nn.Module):
             with torch.no_grad():
                 self.grid = torch.FloatTensor(coordinates).to(x.device)
                 self.grid.requires_grad = True
-
         with torch.no_grad():
             grid = self.grid.repeat(x.shape[0], 1, 1, 1)
 
