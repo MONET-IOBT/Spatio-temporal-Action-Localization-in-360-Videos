@@ -43,7 +43,7 @@ class Sph_SSD(nn.Module):
         # TODO: implement __call__ in PriorBox
         self.priorbox = SphPriorBox(sph_v2)
         with torch.no_grad():
-            self.priors = self.priorbox.forward()#.cuda()
+            self.priors = self.priorbox.forward().cuda()
             self.num_priors = self.priors.size(0)
             self.size = 300
 
@@ -108,7 +108,8 @@ class Sph_SSD(nn.Module):
 
         loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
-        output = (loc.view(loc.size(0), -1, 5),
+        annot_len = self.priors.shape[1]
+        output = (loc.view(loc.size(0), -1, annot_len),
                   conf.view(conf.size(0), -1, self.num_classes),
                   self.priors
                   )
@@ -194,14 +195,15 @@ def multibox(vgg, extra_layers, cfg, num_classes):
     loc_layers = []
     conf_layers = []
     vgg_source = [24, -2]
+    box_len = 4 if sph_v2['no_rotation'] else 5
     for k, v in enumerate(vgg_source):
         loc_layers += [nn.Conv2d(vgg[v].out_channels,
-                                 cfg[k] * 5, kernel_size=3, padding=1)]
+                                 cfg[k] * box_len, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(vgg[v].out_channels,
                         cfg[k] * num_classes, kernel_size=3, padding=1)]
     for k, v in enumerate(extra_layers[1::2], 2):
         loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
-                                 * 5, kernel_size=3, padding=1)]
+                                 * box_len, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                   * num_classes, kernel_size=3, padding=1)]
     return vgg, extra_layers, (loc_layers, conf_layers)
@@ -216,8 +218,10 @@ extras = {
     '300': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128, 256],
     '512': [],
 }
+rot = sph_v2['num_rotations']
+no_rot = sph_v2['no_rotation']
 mbox = {
-    '300': [4*8, 6*8, 6*8, 6*8, 4*8, 4*8],  # number of boxes per feature map location
+    '300': [4*(rot,1)[no_rot], 6*(rot,1)[no_rot], 6*(rot,1)[no_rot], 6*(rot,1)[no_rot], 4*(rot,1)[no_rot], 4*(rot,1)[no_rot]],  # number of boxes per feature map location
     '512': [],
 }
 

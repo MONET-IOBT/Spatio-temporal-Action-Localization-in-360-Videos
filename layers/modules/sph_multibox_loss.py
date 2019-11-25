@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from data import v2 as cfg
+from data import sph_v2 as cfg
 from ..sph_box_utils import sph_match, log_sum_exp
 
 class SphMultiBoxLoss(nn.Module):
@@ -41,6 +41,7 @@ class SphMultiBoxLoss(nn.Module):
         self.negpos_ratio = neg_pos
         self.neg_overlap = neg_overlap
         self.variance = cfg['variance']
+        self.no_rotation = cfg['no_rotation']
 
     def forward(self, predictions, targets):
         """Multibox Loss
@@ -62,18 +63,19 @@ class SphMultiBoxLoss(nn.Module):
 
         # match priors (default boxes) and ground truth boxes
         with torch.no_grad():
+            box_len = priors.shape[1]
             if self.use_gpu:
-                loc_t = torch.cuda.FloatTensor(num, num_priors, 5)
+                loc_t = torch.cuda.FloatTensor(num, num_priors, box_len)
                 conf_t = torch.cuda.LongTensor(num, num_priors)
             else:
-                loc_t = torch.Tensor(num, num_priors, 5)
+                loc_t = torch.Tensor(num, num_priors, box_len)
                 conf_t = torch.LongTensor(num, num_priors)
             for idx in range(num):
                 truths = targets[idx][:, :-1].data # box annotation
                 labels = targets[idx][:, -1].data # action type
                 defaults = priors.data
                 sph_match(self.threshold, truths, defaults, self.variance, labels,
-                    loc_t, conf_t, idx, self.use_gpu)
+                    loc_t, conf_t, idx)
             if self.use_gpu:
                 loc_t = loc_t.cuda()
                 conf_t = conf_t.cuda()
@@ -88,8 +90,12 @@ class SphMultiBoxLoss(nn.Module):
         # Shape: [batch,num_priors,4]
         # only extract positive/foreground samples
         pos_idx = pos.unsqueeze(pos.dim()).expand_as(loc_data)
-        loc_p = loc_data[pos_idx].view(-1, 5)
-        loc_t = loc_t[pos_idx].view(-1, 5)
+        if self.no_rotation:
+            loc_p = loc_data[pos_idx].view(-1, 4)
+            loc_t = loc_t[pos_idx].view(-1, 4)
+        else:
+            loc_p = loc_data[pos_idx].view(-1, 5)
+            loc_t = loc_t[pos_idx].view(-1, 5)
         loss_l = F.smooth_l1_loss(loc_p, loc_t, reduction='sum')
         with torch.no_grad():
             # Compute max conf across batch for hard negative mining

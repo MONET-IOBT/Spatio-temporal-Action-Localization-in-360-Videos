@@ -34,6 +34,7 @@ class SphPriorBox(object):
         self.version = cfg['name']
         assert('num_rotations' in cfg)
         self.num_rotations = cfg['num_rotations']
+        self.no_rotation = cfg['no_rotation']
         for v in self.variance:
             if v <= 0:
                 raise ValueError('Variances must be greater than 0')
@@ -70,18 +71,25 @@ class SphPriorBox(object):
                             boxes.append([cx, cy, s_kx*sqrt(ar), s_ky/sqrt(ar)])
                             boxes.append([cx, cy, s_kx/sqrt(ar), s_ky*sqrt(ar)])
 
-                        # add rotation to all boxes
-                        for cx,cy,sx,sy in boxes:
-                            for l in range(self.num_rotations):
-                                rot_x = 1./self.num_rotations*l
-                                mean += [cx,cy,sx,sy,rot_x]
-                        
+                        if self.no_rotation:
+                            for box in boxes:
+                                mean += box
+                        else:
+                            # add rotation to all boxes
+                            for cx,cy,sx,sy in boxes:
+                                for l in range(self.num_rotations):
+                                    rot_x = 1./self.num_rotations*l
+                                    mean += [cx,cy,sx,sy,rot_x]
+                     
 
         else:
             print('Not implemented')
             exit(-1)
         # back to torch land
-        output = torch.Tensor(mean).view(-1, 5)
+        if self.no_rotation:
+            output = torch.Tensor(mean).view(-1, 4)
+        else:
+            output = torch.Tensor(mean).view(-1, 5)
         if self.clip:
             output.clamp_(max=1, min=0)
         return output

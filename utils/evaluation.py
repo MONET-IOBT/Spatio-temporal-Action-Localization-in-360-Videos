@@ -64,7 +64,6 @@ def compute_iou(cls_gt_boxes, box):
         ymin = max(gtbox[1], box[1])
         xmax = min(gtbox[2], box[2])
         ymax = min(gtbox[3], box[3])
-        drot = gtbox[4] - box[4]
         iw = np.maximum(xmax - xmin, 0.)
         ih = np.maximum(ymax - ymin, 0.)
         if iw>0 and ih>0:
@@ -73,7 +72,10 @@ def compute_iou(cls_gt_boxes, box):
             intsc = 0.0
         # print (intsc)
         union = (gtbox[2] - gtbox[0]) * (gtbox[3] - gtbox[1]) + (box[2] - box[0]) * (box[3] - box[1]) - intsc
-        ious[m] = intsc/union*np.cos(drot)
+        ious[m] = intsc/union
+        if gtbox.shape[0] == 5:
+            drot = gtbox[4] - box[4]
+            ious[m] *= (np.cos(drot)+1)/2
 
     return ious
 

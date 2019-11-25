@@ -21,7 +21,7 @@ from data import sph_v2, AnnotationTransform, CLASSES, BaseTransform
 from data.omni_dataset import OmniUCF24, sph_detection_collate
 from utils.augmentations import SSDAugmentation
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
-from sph_ssd import build_sph_ssd
+from model.sph_ssd import build_sph_ssd
 import numpy as np
 import time
 from utils.evaluation import evaluate_detections
@@ -56,7 +56,7 @@ parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom t
 parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom Server')
 parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
 parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
-parser.add_argument('--iou_thresh', default=0.1, type=float, help='Evaluation threshold')
+parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
@@ -94,7 +94,7 @@ def main():
     if not os.path.isdir(args.save_root):
         os.makedirs(args.save_root)
 
-    net = build_sph_ssd(300, args.num_classes)
+    net = build_sph_ssd(300, args.num_classes, False)
 
     if args.cuda:
         net = net.cuda()

@@ -52,6 +52,8 @@ sph_v2 = {
     'clip' : True,
 
     'name' : 'sph_v2',
+
+    'no_rotation' : False,
 }
 
 # use average pooling layer as last layer before multibox layers

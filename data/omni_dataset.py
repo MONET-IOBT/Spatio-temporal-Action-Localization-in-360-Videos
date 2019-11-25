@@ -12,7 +12,7 @@ from functools import lru_cache
 
 import sys
 sys.path.insert(0, '/home/bo/research/realtime-action-detection')
-
+from data import sph_v2 as cfg
 
 def genuv(h, w):
     u, v = np.meshgrid(np.arange(w), np.arange(h))
@@ -165,9 +165,9 @@ class OmniDataset(data.Dataset):
         if fix_aug:
             self.aug = [
                 {
-                    'z_rotate': np.pi/4,#np.random.uniform(-np.pi, np.pi),
-                    'y_rotate': np.pi/4,#np.random.uniform(-np.pi/2, np.pi/2),
-                    'x_rotate': np.pi/4,#np.random.uniform(-np.pi, np.pi),
+                    'z_rotate': np.random.uniform(-np.pi, np.pi),
+                    'y_rotate': np.random.uniform(-np.pi/2, np.pi/2),
+                    'x_rotate': np.random.uniform(-np.pi, np.pi),
                 }
                 for _ in range(len(self.dataset))
             ]
@@ -217,6 +217,8 @@ class OmniDataset(data.Dataset):
     def _get_label(self, idx, rot_x, rot_y, rot_z):
         # transform bboxes
         bboxes = self.dataset[idx][1]
+        if cfg['no_rotation']:
+            return bboxes
 
         new_bboxes = []
         for xmin,ymin,xmax,ymax,ac_type in bboxes:
