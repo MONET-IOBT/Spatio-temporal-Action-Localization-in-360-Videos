@@ -40,7 +40,7 @@ parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=300, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=10, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=16, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=4, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--max_iter', default=120000, type=int, help='Number of training iterations')
@@ -54,11 +54,13 @@ parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight dec
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
 parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom Server')
-parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
-parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
+parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
+# set threshold to rect_thresh x angle_thresh = 0.5 * 0.85 = 0.43
+parser.add_argument('--iou_thresh', default=0.43, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
-parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
+# set threshold to rect_thresh x angle_thresh = 0.45 * 0.85 = 0.38
+parser.add_argument('--nms_thresh', default=0.38, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
 
 ## Parse arguments

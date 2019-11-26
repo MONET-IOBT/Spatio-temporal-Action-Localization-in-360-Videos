@@ -34,30 +34,6 @@ class VGG(nn.Module):
         x = self.classifier(x)
         return x
 
-class SphVGG(nn.Module):
-    def __init__(self, base, num_classes):
-        super(SphVGG, self).__init__()
-
-        self.vgg = nn.Sequential(*base)
-
-        self.classifier = nn.Sequential(
-            nn.Linear(1024*4*7, num_classes),
-        )
-         # Initialize weights
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
-                m.bias.data.zero_()
-
-    def forward(self, x):
-
-        x = self.vgg(x)
-        x = x.view(x.size(0), -1)
-        x = self.classifier(x)
-        return x
-        
-
 # This function is derived from torchvision VGG make_layers()
 # https://github.com/pytorch/vision/blob/master/torchvision/models/vgg.py
 def vgg(cfg, i, batch_norm=False):
@@ -115,4 +91,4 @@ def vgg4ssd():
     return VGG(vgg(base['300'], 3),10)
 
 def sph_vgg4ssd():
-    return SphVGG(vgg(base['300'], 3),10)
+    return VGG(sph_vgg(base['300'], 3),10)

@@ -148,7 +148,7 @@ def uv2img_idx(uv, h, w, u_fov, v_fov, rot_x=0, rot_y=0, rot_z=0):
 class OmniDataset(data.Dataset):
     def __init__(self, dataset, fov=120, outshape=(300, 600),
                  z_rotate=True, y_rotate=True, x_rotate=True,
-                 fix_aug=True):
+                 fix_aug=False):
         '''
         Convert classification dataset to omnidirectional version
         @dataset  dataset with same interface as torch.utils.data.Dataset
@@ -332,7 +332,7 @@ if __name__ == '__main__':
     os.makedirs(args.out_dir, exist_ok=True)
 
 
-    args.data_root = '/home/bo/research/dataset/ucf24/'
+    args.data_root = '/home/monet/research/dataset/ucf24/'
     args.train_sets = 'train'
     args.means = (104, 117, 123)
 

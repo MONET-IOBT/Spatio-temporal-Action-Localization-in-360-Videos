@@ -20,7 +20,7 @@ import torch.utils.data as data
 from data import v2, UCF24Detection, AnnotationTransform, detection_collate, CLASSES, BaseTransform
 from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
-from ssd import build_ssd
+from model.ssd import build_ssd
 import numpy as np
 import time
 from utils.evaluation import evaluate_detections
@@ -53,8 +53,8 @@ parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight dec
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
 parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom Server')
-parser.add_argument('--data_root', default='/mnt/mercury-beta/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/mnt/mercury-beta/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
