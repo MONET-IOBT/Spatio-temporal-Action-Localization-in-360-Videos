@@ -11,7 +11,7 @@ from torchvision import datasets
 from functools import lru_cache
 
 import sys
-sys.path.insert(0, '/home/bo/research/realtime-action-detection')
+sys.path.insert(0, '/home/monet/research/realtime-action-detection')
 from data import sph_v2 as cfg
 
 def genuv(h, w):
@@ -146,8 +146,8 @@ def uv2img_idx(uv, h, w, u_fov, v_fov, rot_x=0, rot_y=0, rot_z=0):
 
 
 class OmniDataset(data.Dataset):
-    def __init__(self, dataset, fov=120, outshape=(300, 600),
-                 z_rotate=True, y_rotate=True, x_rotate=True,
+    def __init__(self, dataset, fov=120, outshape=(300, 300),
+                 z_rotate=True, y_rotate=True, x_rotate=False,
                  fix_aug=False):
         '''
         Convert classification dataset to omnidirectional version
@@ -159,7 +159,8 @@ class OmniDataset(data.Dataset):
         self.outshape = outshape
         self.z_rotate = z_rotate
         self.y_rotate = y_rotate
-        self.x_rotate = x_rotate
+        self.x_rotate = not cfg['no_rotation']#x_rotate
+        self.name = dataset.name
 
         self.aug = None
         if fix_aug:
@@ -200,25 +201,22 @@ class OmniDataset(data.Dataset):
         else:
             rot_x = 0
 
-        img = np.array(self.dataset[idx][0], np.float32)
+        img, label, index = self.dataset[idx]
+
         if len(img.shape)==2:
-            data = self._get_img(idx, rot_x, rot_y, rot_z)
-            label = self._get_label(idx, rot_x, rot_y, rot_z)
+            img = self._get_img(img, rot_x, rot_y, rot_z)
+            label = self._get_label(label, rot_x, rot_y, rot_z)
         else:
             img_stack = []
             for ch in range(img.shape[0]):
-                img_ch = self._get_img(idx, rot_x, rot_y, rot_z, ch=ch)
+                img_ch = self._get_img(img, rot_x, rot_y, rot_z, ch=ch)
                 img_stack.append(img_ch.unsqueeze(0))
-            data = torch.cat(img_stack, dim=0)
+            img = torch.cat(img_stack, dim=0)
             assert(img.shape[0]==3)
-            label = self._get_label(idx, rot_x, rot_y, rot_z)
-        return data, label
+            label = self._get_label(label, rot_x, rot_y, rot_z)
+        return img, label, index
 
-    def _get_label(self, idx, rot_x, rot_y, rot_z):
-        # transform bboxes
-        bboxes = self.dataset[idx][1]
-        if cfg['no_rotation']:
-            return bboxes
+    def _get_label(self, bboxes, rot_x, rot_y, rot_z):
 
         new_bboxes = []
         for xmin,ymin,xmax,ymax,ac_type in bboxes:
@@ -246,19 +244,20 @@ class OmniDataset(data.Dataset):
             elif cv < 0:
                 cv = -cv
                 cu = cu-0.5 if cu>=0.5 else cu+0.5
-            new_bboxes.append([cu-w/2,cv-h/2,cu+w/2,cv+h/2,rot_x/np.pi/2+0.5,ac_type])
+            if cfg['no_rotation']:
+                new_bboxes.append([cu-w/2,cv-h/2,cu+w/2,cv+h/2,ac_type])
+            else:
+                new_bboxes.append([cu-w/2,cv-h/2,cu+w/2,cv+h/2,rot_x/np.pi/2+0.5,ac_type])
         bboxes = new_bboxes
 
         return bboxes
 
 
-    def _get_img(self, idx, rot_x, rot_y, rot_z, ch = None):
+    def _get_img(self, img, rot_x, rot_y, rot_z, ch = None):
         # get image content from one channel
 
-        if ch is None:
-            img = np.array(self.dataset[idx][0], np.float32)
-        else:
-            img = np.array(self.dataset[idx][0], np.float32)[ch,:,:]
+        if ch is not None:
+            img = img[ch,:,:]
         h, w = img.shape[:2]
         uv = genuv(*self.outshape) # out_h, out_w, (out_phi, out_theta)
         fov = self.fov * np.pi / 180
@@ -269,7 +268,7 @@ class OmniDataset(data.Dataset):
         return torch.FloatTensor(x.copy())
 
 
-from data import UCF24Detection, AnnotationTransform
+from data import UCF24Detection, AnnotationTransform, BaseTransform
 
 class OmniUCF24(OmniDataset):
     def __init__(self, root, image_set, transform=None, target_transform=None,
@@ -337,8 +336,7 @@ if __name__ == '__main__':
     args.means = (104, 117, 123)
 
     if args.dataset == 'OmniUCF24':
-        from utils.augmentations import SSDAugmentation
-        dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(args.ssd_dim, args.means),
+        dataset = OmniUCF24(args.data_root, args.train_sets, BaseTransform(args.ssd_dim, args.means),
                            AnnotationTransform(), input_type=args.input_type)
     else:
         exit(0)
@@ -346,16 +344,8 @@ if __name__ == '__main__':
     for idx in args.idx:
         idx = int(idx)
         path = os.path.join(args.out_dir, '%d.png' % idx)
-        x, label = dataset[idx]
-        # for c in range(3):
-        #     x[c,:,:] += args.means[c]
+        x, label, _ = dataset[idx]
 
         print(path, label)
         img = Image.fromarray(x.permute(1, 2, 0).numpy().astype(np.uint8))
-        from PIL import ImageDraw
-        draw = ImageDraw.Draw(img)
-        for l,t,r,b,rot_x,ac_type in label:
-            l,r = l*600,r*600
-            t,b = t*300,b*300
-            draw.rectangle(((l,t), (r,b)), fill="black")
         img.save(path)

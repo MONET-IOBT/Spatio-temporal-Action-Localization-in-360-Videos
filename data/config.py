@@ -53,7 +53,7 @@ sph_v2 = {
 
     'name' : 'sph_v2',
 
-    'no_rotation' : False,
+    'no_rotation' : True, # inplane rotation
 }
 
 # use average pooling layer as last layer before multibox layers

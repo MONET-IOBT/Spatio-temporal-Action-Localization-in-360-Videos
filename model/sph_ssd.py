@@ -14,7 +14,7 @@ from torch.autograd import Variable
 import sys
 sys.path.insert(0, '/home/bo/code/realtime-action-detection')
 from layers import *
-from data import sph_v2
+from data import sph_v2,v2
 from layers.functions.sph_prior_box import SphPriorBox
 from model.spherenet.sphere_cnn import SphereConv2D, SphereMaxPool2D
 import os
@@ -41,7 +41,7 @@ class Sph_SSD(nn.Module):
 
         self.num_classes = num_classes
         # TODO: implement __call__ in PriorBox
-        self.priorbox = SphPriorBox(sph_v2)
+        self.priorbox = PriorBox(v2)#SphPriorBox(v2)
         with torch.no_grad():
             self.priors = self.priorbox.forward().cuda()
             self.num_priors = self.priors.size(0)

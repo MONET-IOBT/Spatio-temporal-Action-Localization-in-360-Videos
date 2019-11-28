@@ -17,7 +17,8 @@ import torch.optim as optim
 import torch.nn.init as init
 import argparse
 import torch.utils.data as data
-from data import v2, UCF24Detection, AnnotationTransform, detection_collate, CLASSES, BaseTransform
+from data.omni_dataset import OmniUCF24, sph_detection_collate
+from data import v2, AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
 from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
 from model.ssd import build_ssd
@@ -80,7 +81,7 @@ def main():
     args.num_classes = num_classes
     args.stepvalues = [int(val) for val in args.stepvalues.split(',')]
     args.loss_reset_step = 30
-    args.eval_step = 500
+    args.eval_step = 3000
     args.print_step = 10
 
     ## Define the experiment Name will used to same directory and ENV for visdom
@@ -159,11 +160,10 @@ def train(args, net, optimizer, criterion, scheduler):
     cls_losses = AverageMeter()
 
     print('Loading Dataset...')
-    train_dataset = UCF24Detection(args.data_root, args.train_sets, SSDAugmentation(args.ssd_dim, args.means),
-                                   AnnotationTransform(), input_type=args.input_type)
-    val_dataset = UCF24Detection(args.data_root, 'test', BaseTransform(args.ssd_dim, args.means),
-                                 AnnotationTransform(), input_type=args.input_type,
-                                 full_test=False)
+    train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(args.ssd_dim, args.means),
+                           AnnotationTransform(), input_type=args.input_type)
+    val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(args.ssd_dim, args.means),
+                           AnnotationTransform(), input_type=args.input_type)
     epoch_size = len(train_dataset) // args.batch_size
     print('Training SSD on', train_dataset.name)
 
@@ -177,7 +177,7 @@ def train(args, net, optimizer, criterion, scheduler):
     t0 = time.perf_counter()
     iteration = 0
     while iteration <= args.max_iter:
-        for i, (images, targets, img_indexs) in enumerate(train_data_loader):
+        for i, (images, targets, _) in enumerate(train_data_loader):
 
             if iteration > args.max_iter:
                 break
@@ -281,7 +281,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
             torch.cuda.synchronize()
             t1 = time.perf_counter()
 
-            images, targets, img_indexs = next(batch_iterator)
+            images, targets, _ = next(batch_iterator)
             batch_size = images.size(0)
             height, width = images.size(2), images.size(3)
 

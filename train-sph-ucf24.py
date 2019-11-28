@@ -40,7 +40,7 @@ parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=300, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=16, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=32, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=4, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--max_iter', default=120000, type=int, help='Number of training iterations')
@@ -57,10 +57,10 @@ parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom 
 parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
 parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
 # set threshold to rect_thresh x angle_thresh = 0.5 * 0.85 = 0.43
-parser.add_argument('--iou_thresh', default=0.43, type=float, help='Evaluation threshold')
+parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 # set threshold to rect_thresh x angle_thresh = 0.45 * 0.85 = 0.38
-parser.add_argument('--nms_thresh', default=0.38, type=float, help='NMS threshold')
+parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
 
 ## Parse arguments
@@ -83,7 +83,7 @@ def main():
     args.num_classes = num_classes
     args.stepvalues = [int(val) for val in args.stepvalues.split(',')]
     args.loss_reset_step = 30
-    args.eval_step = 5000
+    args.eval_step = 1000
     args.print_step = 10
 
     ## Define the experiment Name will used to same directory and ENV for visdom
@@ -313,7 +313,8 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                 gt[:,2] *= width
                 gt[:,1] *= height
                 gt[:,3] *= height
-                gt[:,4] = np.pi*2*gt[:,4] - np.pi
+                if gt.shape[1] == 6:
+                    gt[:,4] = np.pi*2*gt[:,4] - np.pi
                 gt_boxes.append(gt)
                 # obtain the actual prediction in point form
                 decoded_boxes = decode(loc_data[b].data, prior_data.data, args.cfg['variance']).clone()
@@ -331,7 +332,10 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                         continue
                     boxes = decoded_boxes.clone() # [num_priors, 5]
                     l_mask = c_mask.unsqueeze(1).expand_as(boxes)
-                    boxes = boxes[l_mask].view(-1, 5) # the boxes with score higher than threshold
+                    if gt.shape[1] == 6:
+                        boxes = boxes[l_mask].view(-1, 5) # the boxes with score higher than threshold
+                    else:
+                        boxes = boxes[l_mask].view(-1, 4) # the boxes with score higher than threshold
                     # idx of highest scoring and non-overlapping boxes per class
                     ids, counts = nms(boxes, scores, args.nms_thresh, args.topk)  # idsn - ids after nms
                     # remaining boxes after nms
@@ -342,7 +346,8 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                     boxes[:,2] *= width
                     boxes[:,1] *= height
                     boxes[:,3] *= height
-                    boxes[:,4] = np.pi*2*boxes[:,4] - np.pi
+                    if boxes.shape[1]==5:
+                        boxes[:,4] = np.pi*2*boxes[:,4] - np.pi
 
                     # for ik in range(boxes.shape[0]):
                     #     boxes[ik, 0] = max(0, boxes[ik, 0])

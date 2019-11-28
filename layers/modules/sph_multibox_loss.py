@@ -76,6 +76,7 @@ class SphMultiBoxLoss(nn.Module):
                 defaults = priors.data
                 sph_match(self.threshold, truths, defaults, self.variance, labels,
                     loc_t, conf_t, idx)
+
             if self.use_gpu:
                 loc_t = loc_t.cuda()
                 conf_t = conf_t.cuda()

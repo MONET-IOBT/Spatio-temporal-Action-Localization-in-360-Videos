@@ -172,11 +172,16 @@ def decode(loc, priors, variances):
     Return:
         decoded bounding box predictions
     """
-
-    boxes = torch.cat((
-        priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:4],
-        priors[:, 2:4] * torch.exp(loc[:, 2:4] * variances[1]),
-        priors[:, 4].unsqueeze(1)), 1)
+    assert(priors.shape[1] == 4 or priors.shape[1] == 5)
+    if priors.shape[1] == 5:
+        boxes = torch.cat((
+            priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:4],
+            priors[:, 2:4] * torch.exp(loc[:, 2:4] * variances[1]),
+            priors[:, 4].unsqueeze(1)), 1)
+    else:
+        boxes = torch.cat((
+            priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:4],
+            priors[:, 2:4] * torch.exp(loc[:, 2:4] * variances[1])), 1)
     boxes[:, :2] -= boxes[:, 2:4] / 2
     boxes[:, 2:4] += boxes[:, :2]
     return boxes
@@ -220,9 +225,10 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
     y1 = boxes[:, 1]
     x2 = boxes[:, 2]
     y2 = boxes[:, 3]
+    area = torch.mul(x2 - x1, y2 - y1)
     if boxes.shape[1] == 5:
         alpha = boxes[:, 4]
-    area = torch.mul(x2 - x1, y2 - y1) * (torch.cos(alpha)+1)/2
+        area *= (torch.cos(alpha)+1)/2
     v, idx = scores.sort(0)  # sort in ascending order
     # I = I[v >= 0.01]
     idx = idx[-top_k:]  # indices of the top-k largest vals

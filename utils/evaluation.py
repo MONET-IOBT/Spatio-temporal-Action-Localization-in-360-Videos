@@ -74,6 +74,7 @@ def compute_iou(cls_gt_boxes, box):
         union = (gtbox[2] - gtbox[0]) * (gtbox[3] - gtbox[1]) + (box[2] - box[0]) * (box[3] - box[1]) - intsc
         ious[m] = intsc/union
         if gtbox.shape[0] == 5:
+            assert(gtbox[4]>=-np.pi and gtbox[4]<=np.pi and box[4]>=-np.pi and box[4]<=np.pi)
             drot = gtbox[4] - box[4]
             ious[m] *= (np.cos(drot)+1)/2
 

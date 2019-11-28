@@ -80,7 +80,6 @@ class SphPriorBox(object):
                                 for l in range(self.num_rotations):
                                     rot_x = 1./self.num_rotations*l
                                     mean += [cx,cy,sx,sy,rot_x]
-                     
 
         else:
             print('Not implemented')
