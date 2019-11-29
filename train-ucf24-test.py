@@ -21,11 +21,14 @@ from data.omni_dataset import OmniUCF24, sph_detection_collate
 from data import v2, AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
 from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
+from layers.modules.sph_multibox_loss import SphMultiBoxLoss
 from model.ssd import build_ssd
+from model.sph_ssd import build_sph_ssd
 import numpy as np
 import time
 from utils.evaluation import evaluate_detections
 from layers.box_utils import decode, nms
+# from layers.sph_box_utils import decode, nms
 from utils import  AverageMeter
 from torch.optim.lr_scheduler import MultiStepLR
 
@@ -94,7 +97,7 @@ def main():
     if not os.path.isdir(args.save_root):
         os.makedirs(args.save_root)
 
-    net = build_ssd(300, args.num_classes)
+    net = build_sph_ssd(300, args.num_classes)
 
     if args.cuda:
         net = net.cuda()
@@ -140,6 +143,7 @@ def main():
 
     optimizer = optim.SGD(params, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     criterion = MultiBoxLoss(args.num_classes, 0.5, True, 0, True, 3, 0.5, False, args.cuda)
+    # criterion = SphMultiBoxLoss(args.num_classes, 0.5, True, 0, True, 3, 0.5, False, args.cuda)
     scheduler = MultiStepLR(optimizer, milestones=args.stepvalues, gamma=args.gamma)
     train(args, net, optimizer, criterion, scheduler)
 

@@ -41,7 +41,7 @@ class Sph_SSD(nn.Module):
 
         self.num_classes = num_classes
         # TODO: implement __call__ in PriorBox
-        self.priorbox = PriorBox(v2)#SphPriorBox(v2)
+        self.priorbox = SphPriorBox(sph_v2)
         with torch.no_grad():
             self.priors = self.priorbox.forward().cuda()
             self.num_priors = self.priors.size(0)
