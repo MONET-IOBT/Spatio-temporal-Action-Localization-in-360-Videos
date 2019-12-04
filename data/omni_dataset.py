@@ -11,7 +11,7 @@ from torchvision import datasets
 from functools import lru_cache
 
 import sys
-sys.path.insert(0, '/home/monet/research/realtime-action-detection')
+sys.path.insert(0, '/home/bo/research/realtime-action-detection')
 from data import sph_v2 as cfg
 
 def genuv(h, w):
@@ -166,9 +166,9 @@ class OmniDataset(data.Dataset):
         if fix_aug:
             self.aug = [
                 {
-                    'z_rotate': np.random.uniform(-np.pi, np.pi),
-                    'y_rotate': np.random.uniform(-np.pi/2, np.pi/2),
-                    'x_rotate': np.random.uniform(-np.pi, np.pi),
+                    'z_rotate': 0,#np.random.uniform(-np.pi, np.pi),
+                    'y_rotate': 0,#np.random.uniform(-np.pi/2, np.pi/2),
+                    'x_rotate': 0,#np.random.uniform(-np.pi, np.pi),
                 }
                 for _ in range(len(self.dataset))
             ]
@@ -331,13 +331,13 @@ if __name__ == '__main__':
     os.makedirs(args.out_dir, exist_ok=True)
 
 
-    args.data_root = '/home/monet/research/dataset/ucf24/'
+    args.data_root = '/home/bo/research/dataset/ucf24/'
     args.train_sets = 'train'
     args.means = (104, 117, 123)
 
     if args.dataset == 'OmniUCF24':
         dataset = OmniUCF24(args.data_root, args.train_sets, BaseTransform(args.ssd_dim, args.means),
-                           AnnotationTransform(), input_type=args.input_type)
+                           AnnotationTransform(), input_type=args.input_type, fix_aug=True)
     else:
         exit(0)
 

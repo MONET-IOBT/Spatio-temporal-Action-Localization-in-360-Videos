@@ -17,7 +17,32 @@ from layers import *
 from data import sph_v2,v2
 from layers.functions.sph_prior_box import SphPriorBox
 from model.spherenet.sphere_cnn import SphereConv2D, SphereMaxPool2D
+from model.KernelTransformer.KTNLayer import KTNConv
 import os
+
+# KTN stuff
+
+INPUT_WIDTH = 600
+FOV = 120
+TIED_WEIGHT = 5
+
+featmap = sph_v2['feature_maps']
+imgSize = {'vgg.0':(int(INPUT_WIDTH/2),INPUT_WIDTH), 'vgg.2':(int(INPUT_WIDTH/2),INPUT_WIDTH),\
+        'vgg.5':(int(INPUT_WIDTH/4),int(INPUT_WIDTH/2)), 'vgg.7':(int(INPUT_WIDTH/4),int(INPUT_WIDTH/2)),\
+        'vgg.10':(int(INPUT_WIDTH/8),int(INPUT_WIDTH/4)), 'vgg.12':(int(INPUT_WIDTH/8),int(INPUT_WIDTH/4)), 'vgg.14':(int(INPUT_WIDTH/8),int(INPUT_WIDTH/4)),\
+        'vgg.17':featmap[0], 'vgg.19':featmap[0], 'vgg.21':featmap[0],\
+        'vgg.24':featmap[1], 'vgg.26':featmap[1], 'vgg.28':featmap[1],\
+        'vgg.31':featmap[1], 'vgg.33':featmap[1],\
+        'extras.0':featmap[1], 'extras.1':featmap[2], 'extras.2':featmap[2],\
+        'extras.3':featmap[3], 'extras.4':featmap[3], 'extras.5':featmap[4],\
+        'extras.6':featmap[4], 'extras.7':featmap[5],\
+        'loc.0':featmap[0], 'loc.1':featmap[1], 'loc.2':featmap[2],\
+        'loc.3':featmap[3], 'loc.4':featmap[4], 'loc.5':featmap[5],\
+        'conf.0':featmap[0], 'conf.1':featmap[1], 'conf.2':featmap[2],\
+        'conf.3':featmap[3], 'conf.4':featmap[4], 'conf.5':featmap[5]}
+
+LAYERS = imgSize.keys()
+# 
 
 
 class Sph_SSD(nn.Module):
@@ -57,6 +82,17 @@ class Sph_SSD(nn.Module):
         self.conf = nn.ModuleList(head[1])
 
         self.softmax = nn.Softmax(dim=1).cuda()
+
+    def transform(self):
+        for i,layer in enumerate(self.vgg):
+            name = 'vgg.' + str(i)
+            if name in LAYERS:
+                self.vgg[i] = build_ktnconv(name, layer.weight, layer.bias)
+
+        for i,layer in enumerate(self.extras):
+            name = 'extra.' + str(i)
+            if name in LAYERS:
+                self.extras[i] = build_ktnconv(name, layer.weight, layer.bias)
 
     def forward(self, x):
 
@@ -116,14 +152,26 @@ class Sph_SSD(nn.Module):
         assert(output[0].shape[-2] == output[2].shape[-2])
         return output
 
-    def load_weights(self, base_file):
-        other, ext = os.path.splitext(base_file)
-        if ext == '.pkl' or '.pth':
-            print('Loading weights into state dict...')
-            self.load_state_dict(torch.load(base_file, map_location=lambda storage, loc: storage))
-            print('Finished!')
-        else:
-            print('Sorry only .pth and .pkl files supported.')
+def build_ktnconv(target, kernel, bias):
+
+    fov = FOV
+    ih,iw = imgSize[target]
+    tied_weights = 1 if ih%5!=0 or iw%5!=0 else TIED_WEIGHT
+    dilation = 1
+    arch = 'bilinear' #if target == 'vgg.0' else 'residual'
+    kernel_shape_type = "dilated"
+
+    sys.stderr.write("Build layer {0} with arch: {1}, tied_weights: {2}\n".format(target, arch, tied_weights))
+    ktnconv = KTNConv(kernel,
+                      bias,
+                      sphereH=ih,
+                      imgW=iw,
+                      fov=fov,
+                      dilation=dilation,
+                      tied_weights=tied_weights,
+                      arch=arch,
+                      kernel_shape_type=kernel_shape_type)
+    return ktnconv
 
 
 # This function is derived from torchvision VGG make_layers()
@@ -226,16 +274,20 @@ mbox = {
 }
 
 
-def build_sph_ssd(size=300, num_classes=21, use_sphnet = False):
+def build_sph_ssd(size=300, num_classes=21, net_type = 'conv2d'):
 
     if size != 300:
         print("Error: Sorry only SSD300 is supported currently!")
         return
 
-    if use_sphnet:
+    if net_type == 'sphnet':
         basenet = sph_vgg(base[str(size)], 3)
-    else:
+    elif net_type == 'conv2d' or net_type == 'ktn':
         basenet = vgg(base[str(size)], 3)
+    else:
+        print("Not implemented")
+        exit(0)
+
     return Sph_SSD(*multibox(basenet,
                             add_extras(extras[str(size)], 1024),
                             mbox[str(size)], num_classes), num_classes)
