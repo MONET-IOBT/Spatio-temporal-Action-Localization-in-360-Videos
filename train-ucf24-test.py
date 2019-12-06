@@ -40,17 +40,17 @@ parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Trai
 parser.add_argument('--version', default='v2', help='conv11_2(v2) or pool6(v1) as last layer')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
-parser.add_argument('--ssd_dim', default=300, type=int, help='Input Size for SSD') # only support 300 now
+parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=16, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=4, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--max_iter', default=120000, type=int, help='Number of training iterations')
 parser.add_argument('--man_seed', default=123, type=int, help='manualseed for reproduction')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
-parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, help='initial learning rate')
+parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--stepvalues', default='30000,60000,100000', type=str, help='iter numbers where learing rate to be dropped')
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
@@ -98,7 +98,7 @@ def main():
     if not os.path.isdir(args.save_root):
         os.makedirs(args.save_root)
 
-    net = build_sph_ssd(300, args.num_classes, args.net_type)
+    net = build_sph_ssd(args.ssd_dim, args.num_classes, args.net_type)
 
     def xavier(param):
         init.xavier_uniform(param)
@@ -167,10 +167,10 @@ def train(args, net, optimizer, criterion, scheduler):
     cls_losses = AverageMeter()
 
     print('Loading Dataset...')
-    train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(args.ssd_dim, args.means),
-                           AnnotationTransform(), input_type=args.input_type)
-    val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(args.ssd_dim, args.means),
-                           AnnotationTransform(), input_type=args.input_type)
+    train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means),
+                           AnnotationTransform(), input_type=args.input_type, outshape=(args.ssd_dim,2*args.ssd_dim))
+    val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means),
+                           AnnotationTransform(), input_type=args.input_type, outshape=(args.ssd_dim,2*args.ssd_dim))
     epoch_size = len(train_dataset) // args.batch_size
     print('Training SSD on', train_dataset.name)
 

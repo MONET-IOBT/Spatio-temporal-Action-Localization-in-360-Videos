@@ -14,7 +14,7 @@ from torch.autograd import Variable
 import sys
 sys.path.insert(0, '/home/bo/code/realtime-action-detection')
 from layers import *
-from data import sph_v2,v2
+from data import sph_v2,v2,v3
 from layers.functions.sph_prior_box import SphPriorBox
 from model.spherenet.sphere_cnn import SphereConv2D, SphereMaxPool2D
 from model.KernelTransformer.KTNLayer import KTNConv
@@ -61,16 +61,16 @@ class Sph_SSD(nn.Module):
         head: "multibox head" consists of loc and conf conv layers
     """
 
-    def __init__(self, base, extras, head, num_classes):
+    def __init__(self, base, extras, head, num_classes, ver):
         super(Sph_SSD, self).__init__()
 
         self.num_classes = num_classes
         # TODO: implement __call__ in PriorBox
-        self.priorbox = SphPriorBox(sph_v2)
+        self.priorbox = SphPriorBox(ver)
         with torch.no_grad():
             self.priors = self.priorbox.forward().cuda()
             self.num_priors = self.priors.size(0)
-            self.size = 300
+            self.size = 512
 
         # SSD network
         self.vgg = nn.ModuleList(base)
@@ -228,10 +228,12 @@ def add_extras(cfg, i, batch_norm=False):
     in_channels = i
     flag = False
     for k, v in enumerate(cfg):
-        if in_channels != 'S':
+        if in_channels != 'S' and in_channels != 'K4':
             if v == 'S':
                 layers += [nn.Conv2d(in_channels, cfg[k + 1],
                            kernel_size=(1, 3)[flag], stride=2, padding=1)]
+            elif v == 'K4':
+                layers += [nn.Conv2d(in_channels, cfg[k + 1], kernel_size=4, padding=1)]
             else:
                 layers += [nn.Conv2d(in_channels, v, kernel_size=(1, 3)[flag])]
             flag = not flag
@@ -260,24 +262,25 @@ def multibox(vgg, extra_layers, cfg, num_classes):
 base = {
     '300': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'C',
             512, 512, 512],
-    '512': [],
+    '512': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'C',
+            512, 512, 512],
 }
 extras = {
     '300': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128, 256],
-    '512': [],
+    '512': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128, 'S', 256, 128, 'K4', 256],
 }
 rot = sph_v2['num_rotations']
-no_rot = sph_v2['no_rotation']
+nr = sph_v2['no_rotation']
 mbox = {
-    '300': [4*(rot,1)[no_rot], 6*(rot,1)[no_rot], 6*(rot,1)[no_rot], 6*(rot,1)[no_rot], 4*(rot,1)[no_rot], 4*(rot,1)[no_rot]],  # number of boxes per feature map location
-    '512': [],
+    '300': [4*(rot,1)[nr], 6*(rot,1)[nr], 6*(rot,1)[nr], 6*(rot,1)[nr], 4*(rot,1)[nr], 4*(rot,1)[nr]],  # number of boxes per feature map location
+    '512': [4*(rot,1)[nr], 6*(rot,1)[nr], 6*(rot,1)[nr], 6*(rot,1)[nr], 6*(rot,1)[nr], 4*(rot,1)[nr], 4*(rot,1)[nr]],
 }
 
 
-def build_sph_ssd(size=300, num_classes=21, net_type = 'conv2d'):
+def build_sph_ssd(size=300, num_classes=25, net_type = 'conv2d'):
 
-    if size != 300:
-        print("Error: Sorry only SSD300 is supported currently!")
+    if size != 300 and size != 512:
+        print("Error: Sorry only SSD300 and SSD512 is supported currently!")
         return
 
     if net_type == 'sphnet':
@@ -288,6 +291,8 @@ def build_sph_ssd(size=300, num_classes=21, net_type = 'conv2d'):
         print("Not implemented")
         exit(0)
 
+    ver = sph_v2 if size == 300 else v3
+
     return Sph_SSD(*multibox(basenet,
                             add_extras(extras[str(size)], 1024),
-                            mbox[str(size)], num_classes), num_classes)
+                            mbox[str(size)], num_classes), num_classes, ver)
