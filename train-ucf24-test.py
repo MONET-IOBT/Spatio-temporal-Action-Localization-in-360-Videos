@@ -47,11 +47,11 @@ parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Ja
 parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=4, type=int, help='Number of workers used in dataloading')
-parser.add_argument('--max_iter', default=120000, type=int, help='Number of training iterations')
+parser.add_argument('--max_epoch', default=10, type=int, help='Number of training epochs')
 parser.add_argument('--man_seed', default=123, type=int, help='manualseed for reproduction')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
-parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
+parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--stepvalues', default='30000,60000,100000', type=str, help='iter numbers where learing rate to be dropped')
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
@@ -100,6 +100,7 @@ def main():
         os.makedirs(args.save_root)
 
     if args.net_type == 'fpnssd512':
+        assert(args.ssd_dim == 512)
         net = FPNSSD512(args.num_classes)
     else:
         net = build_sph_ssd(args.ssd_dim, args.num_classes, args.net_type)
@@ -191,7 +192,7 @@ def train(args, net, optimizer, criterion, scheduler):
                            AnnotationTransform(), input_type=args.input_type, outshape=(args.ssd_dim,2*args.ssd_dim))
     val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means),
                            AnnotationTransform(), input_type=args.input_type, outshape=(args.ssd_dim,2*args.ssd_dim))
-    epoch_size = len(train_dataset) // args.batch_size
+    
     print('Training SSD on', train_dataset.name)
 
     batch_iterator = None
@@ -200,6 +201,8 @@ def train(args, net, optimizer, criterion, scheduler):
     val_data_loader = data.DataLoader(val_dataset, args.batch_size, num_workers=args.num_workers,
                                  shuffle=False, collate_fn=detection_collate, pin_memory=True)
     itr_count = 0
+    args.max_iter = args.max_epoch * (len(train_dataset) // args.batch_size)
+    epoch_count = 0
     torch.cuda.synchronize()
     t0 = time.perf_counter()
     iteration = 0
@@ -236,8 +239,8 @@ def train(args, net, optimizer, criterion, scheduler):
                 t1 = time.perf_counter()
                 batch_time.update(t1 - t0)
 
-                print_line = 'Itration {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) ' \
-                             'average-loss {:.3f}({:.3f}) Timer {:0.3f}({:0.3f})'.format(
+                print_line = 'E{:02d} Iter {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) ' \
+                             'avg-loss {:.3f}({:.3f}) Timer {:0.3f}({:0.3f})'.format(epoch_count,
                               iteration, args.max_iter, loc_losses.val, loc_losses.avg, cls_losses.val,
                               cls_losses.avg, losses.val, losses.avg, batch_time.val, batch_time.avg)
 
@@ -282,7 +285,7 @@ def train(args, net, optimizer, criterion, scheduler):
                 prt_str = '\nValidation TIME::: {:0.3f}\n\n'.format(t0-tvs)
                 print(prt_str)
                 log_file.write(ptr_str)
-
+        epoch_count += 1
     log_file.close()
 
 
