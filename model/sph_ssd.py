@@ -241,11 +241,11 @@ def add_extras(cfg, i, batch_norm=False):
     return layers
 
 
-def multibox(vgg, extra_layers, cfg, num_classes):
+def multibox(vgg, extra_layers, cfg, num_classes, ver):
     loc_layers = []
     conf_layers = []
     vgg_source = [24, -2]
-    box_len = 4 if sph_v2['no_rotation'] else 5
+    box_len = 4 if ver['no_rotation'] else 5
     for k, v in enumerate(vgg_source):
         loc_layers += [nn.Conv2d(vgg[v].out_channels,
                                  cfg[k] * box_len, kernel_size=3, padding=1)]
@@ -295,4 +295,4 @@ def build_sph_ssd(size=300, num_classes=25, net_type = 'conv2d'):
 
     return Sph_SSD(*multibox(basenet,
                             add_extras(extras[str(size)], 1024),
-                            mbox[str(size)], num_classes), num_classes, ver)
+                            mbox[str(size)], num_classes, ver), num_classes, ver)

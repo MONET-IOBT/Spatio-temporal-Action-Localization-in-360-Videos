@@ -42,7 +42,7 @@ class SphPriorBox(object):
     def forward(self):
         mean = []
         # TODO merge these
-        if self.version == 'sph_v2' or self.version == 'v3':
+        if self.version == 'sph_v2' or self.version == 'v3' or self.version == 'v4':
             for k, f in enumerate(self.feature_maps):
                 h,w = f
                 for i in range(h):

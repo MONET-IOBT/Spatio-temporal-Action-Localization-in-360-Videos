@@ -24,6 +24,7 @@ from layers.modules import MultiBoxLoss
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
 from model.ssd import build_ssd
 from model.sph_ssd import build_sph_ssd
+from model.fpnssd.net import FPNSSD512
 import numpy as np
 import time
 from utils.evaluation import evaluate_detections
@@ -63,7 +64,7 @@ parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation th
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
-parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or ktn')
+parser.add_argument('--net_type', default='fpnssd512', help='conv2d or sphnet or ktn or fpnssd512')
 
 ## Parse arguments
 args = parser.parse_args()
@@ -98,7 +99,11 @@ def main():
     if not os.path.isdir(args.save_root):
         os.makedirs(args.save_root)
 
-    net = build_sph_ssd(args.ssd_dim, args.num_classes, args.net_type)
+    if args.net_type == 'fpnssd512':
+        net = FPNSSD512(args.num_classes)
+    else:
+        net = build_sph_ssd(args.ssd_dim, args.num_classes, args.net_type)
+    
 
     def xavier(param):
         init.xavier_uniform(param)
@@ -111,15 +116,30 @@ def main():
 
     print('Initializing weights for extra layers and HEADs...')
     # initialize newly added layers' weights with xavier method
-    net.extras.apply(weights_init)
-    net.loc.apply(weights_init)
-    net.conf.apply(weights_init)
+    if args.net_type != 'fpnssd512':
+        net.extras.apply(weights_init)
+        net.loc.apply(weights_init)
+        net.conf.apply(weights_init)
 
     if args.input_type == 'fastOF':
         print('Download pretrained brox flow trained model weights and place them at:::=> ',args.data_root + 'ucf24/train_data/brox_wieghts.pth')
         pretrained_weights = args.data_root + 'ucf24/train_data/brox_wieghts.pth'
         print('Loading base network...')
-        net.load_state_dict(torch.load(pretrained_weights))
+        net.fpn.load_state_dict(torch.load(pretrained_weights))
+    elif args.net_type == 'fpnssd512':
+        pretrained_weights = args.data_root + 'ucf24/train_data/fpnssd512_20_trained.pth'
+        # delete some keys due to change of number of classes 21->25
+        weights = torch.load(pretrained_weights)
+        useless_keys = []
+        for key in weights:
+            if key.find('cls_layers') == 0:
+                useless_keys.append(key)
+        for key in useless_keys:
+            del weights[key]
+        model_dict = net.state_dict()
+        model_dict.update(weights)
+        print('Loading base network...')
+        net.load_state_dict(model_dict)
     else:
         vgg_weights = torch.load(args.data_root +'ucf24/train_data/' + args.basenet)
         print('Loading base network...')
