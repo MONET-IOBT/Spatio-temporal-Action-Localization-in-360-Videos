@@ -22,6 +22,7 @@ class FPNSSD512(nn.Module):
         priorbox = SphPriorBox(v4)
         with torch.no_grad():
             self.priors = priorbox.forward().cuda()
+        self.softmax = nn.Softmax(dim=1).cuda()
         self.loc_layers = nn.ModuleList()
         self.cls_layers = nn.ModuleList()
         for i in range(len(self.in_channels)):

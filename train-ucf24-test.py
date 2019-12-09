@@ -46,12 +46,12 @@ parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep de
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
 parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
-parser.add_argument('--num_workers', default=4, type=int, help='Number of workers used in dataloading')
+parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--max_epoch', default=10, type=int, help='Number of training epochs')
 parser.add_argument('--man_seed', default=123, type=int, help='manualseed for reproduction')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
-parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, help='initial learning rate')
+parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--stepvalues', default='30000,60000,100000', type=str, help='iter numbers where learing rate to be dropped')
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
@@ -198,7 +198,7 @@ def train(args, net, optimizer, criterion, scheduler):
     batch_iterator = None
     train_data_loader = data.DataLoader(train_dataset, args.batch_size, num_workers=args.num_workers,
                                   shuffle=True, collate_fn=detection_collate, pin_memory=True)
-    val_data_loader = data.DataLoader(val_dataset, args.batch_size, num_workers=args.num_workers,
+    val_data_loader = data.DataLoader(val_dataset, 2, num_workers=1,
                                  shuffle=False, collate_fn=detection_collate, pin_memory=True)
     itr_count = 0
     args.max_iter = args.max_epoch * (len(train_dataset) // args.batch_size)
@@ -299,7 +299,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
     gt_boxes = []
     print_time = True
     batch_iterator = None
-    val_step = 100
+    val_step = 1000
     count = 0
     torch.cuda.synchronize()
     ts = time.perf_counter()
