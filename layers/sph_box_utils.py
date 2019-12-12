@@ -106,10 +106,6 @@ def sph_match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
         truths,
         point_form(priors)
     )
-    assert(priors.shape[1] == 4 or priors.shape[1] == 5)
-    if priors.shape[1] == 5:
-        drot = delta_rotation(truths,priors)
-        overlaps = overlaps * (torch.cos(drot)+1)/2
 
     # (Bipartite Matching)
     # [1,num_objects] best prior for each ground truth
@@ -153,10 +149,9 @@ def encode(matched, priors, variances):
     g_wh = (matched[:, 2:4] - matched[:, :2]) / priors[:, 2:4]
     g_wh = torch.log(g_wh) / variances[1]
     # return target for smooth_l1_loss
-    assert(priors.shape[1] == 4 or priors.shape[1] == 5)
-    if priors.shape[1] == 4:
+    if matched.shape[1] == 4:
         return torch.cat([g_cxcy, g_wh], 1)
-    return torch.cat([g_cxcy, g_wh, matched[:,4:]], 1)  # [num_priors,5]
+    return torch.cat([g_cxcy, g_wh, matched[:,4].unsqueeze(1)], 1)  # [num_priors,5]
 
 
 # Adapted from https://github.com/Hakuyume/chainer-ssd
@@ -165,19 +160,18 @@ def decode(loc, priors, variances):
     the encoding we did for offset regression at train time.
     Args:
         loc (tensor): location predictions for loc layers,
-            Shape: [num_priors,4]
+            Shape: [num_priors,5]
         priors (tensor): Prior boxes in center-offset form.
             Shape: [num_priors,4].
         variances: (list[float]) Variances of priorboxes
     Return:
         decoded bounding box predictions
     """
-    assert(priors.shape[1] == 4 or priors.shape[1] == 5)
-    if priors.shape[1] == 5:
+    if loc.shape[1] == 5:
         boxes = torch.cat((
             priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:4],
             priors[:, 2:4] * torch.exp(loc[:, 2:4] * variances[1]),
-            priors[:, 4].unsqueeze(1)), 1)
+            loc[:, 4].unsqueeze(1)), 1)
     else:
         boxes = torch.cat((
             priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:4],
@@ -217,7 +211,6 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
     # 3. calculate IoU of remaining box and the top-1 box
     # 4. keep the remaining box with IoU >= threshold
     # 5. go to step 1 until no remaining box
-    assert(boxes.shape[1] == 5 or boxes.shape[1] == 4)
     keep = scores.new(scores.size(0)).zero_().long()
     if boxes.numel() == 0:
         return keep
@@ -226,9 +219,9 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
     x2 = boxes[:, 2]
     y2 = boxes[:, 3]
     area = torch.mul(x2 - x1, y2 - y1)
-    if boxes.shape[1] == 5:
-        alpha = boxes[:, 4]
-        area *= (torch.cos(alpha)+1)/2
+    # if boxes.shape[1] == 5:
+    #     alpha = boxes[:, 4]
+    #     area *= (torch.cos(alpha)+1)/2
     v, idx = scores.sort(0)  # sort in ascending order
     # I = I[v >= 0.01]
     idx = idx[-top_k:]  # indices of the top-k largest vals
@@ -256,16 +249,16 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
         torch.index_select(y1, 0, idx, out=yy1)
         torch.index_select(x2, 0, idx, out=xx2)
         torch.index_select(y2, 0, idx, out=yy2)
-        if boxes.shape[1] == 5:
-            torch.index_select(alpha, 0, idx, out=alpha2)
+        # if boxes.shape[1] == 5:
+        #     torch.index_select(alpha, 0, idx, out=alpha2)
         # store element-wise max with next highest score
         # find intersection
         xx1 = torch.clamp(xx1, min=x1[i])
         yy1 = torch.clamp(yy1, min=y1[i])
         xx2 = torch.clamp(xx2, max=x2[i])
         yy2 = torch.clamp(yy2, max=y2[i])
-        if boxes.shape[1] == 5:
-            alpha2 = alpha2 - alpha[i]
+        # if boxes.shape[1] == 5:
+        #     alpha2 = alpha2 - alpha[i]
         w.resize_as_(xx2)
         h.resize_as_(yy2)
         w = xx2 - xx1
@@ -279,8 +272,8 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
         rem_areas = torch.index_select(area, 0, idx)  # load remaining areas)
         union = (rem_areas - inter) + area[i]
         IoU = inter/union  # store result in iou
-        if boxes.shape[1] == 5:
-            IoU *= (torch.cos(alpha2)+1)/2
+        # if boxes.shape[1] == 5:
+        #     IoU *= (torch.cos(alpha2)+1)/2
         # keep only elements with an IoU <= overlap
         idx = idx[IoU.le(overlap)]
     return keep, count

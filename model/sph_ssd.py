@@ -269,15 +269,13 @@ extras = {
     '300': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128, 256],
     '512': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128, 'S', 256, 128, 'K4', 256],
 }
-rot = sph_v2['num_rotations']
-nr = sph_v2['no_rotation']
 mbox = {
-    '300': [4*(rot,1)[nr], 6*(rot,1)[nr], 6*(rot,1)[nr], 6*(rot,1)[nr], 4*(rot,1)[nr], 4*(rot,1)[nr]],  # number of boxes per feature map location
-    '512': [4*(rot,1)[nr], 6*(rot,1)[nr], 6*(rot,1)[nr], 6*(rot,1)[nr], 6*(rot,1)[nr], 4*(rot,1)[nr], 4*(rot,1)[nr]],
+    '300': [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
+    '512': [4, 6, 6, 6, 6, 4, 4],
 }
 
 
-def build_sph_ssd(size=300, num_classes=25, net_type = 'conv2d'):
+def build_vgg_ssd(size=300, num_classes=25, net_type = 'conv2d'):
 
     if size != 300 and size != 512:
         print("Error: Sorry only SSD300 and SSD512 is supported currently!")

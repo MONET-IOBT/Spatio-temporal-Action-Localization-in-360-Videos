@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, '/home/bo/research/realtime-action-detection')
 from model.fpnssd.fpn import FPN50
 from layers.functions.sph_prior_box import SphPriorBox
-from data import v4
+from data import v5
 
 class FPNSSD512(nn.Module):
 
@@ -19,14 +19,15 @@ class FPNSSD512(nn.Module):
         self.in_channels = (256, 256, 256, 256, 256, 256, 256)
 
         self.extractor = FPN50()
-        priorbox = SphPriorBox(v4)
+        priorbox = SphPriorBox(v5)
         with torch.no_grad():
             self.priors = priorbox.forward().cuda()
         self.softmax = nn.Softmax(dim=1).cuda()
         self.loc_layers = nn.ModuleList()
         self.cls_layers = nn.ModuleList()
+        self.box_len = 4 if v5['no_rotation'] else 5
         for i in range(len(self.in_channels)):
-        	self.loc_layers += [nn.Conv2d(self.in_channels[i], self.num_anchors[i]*4, kernel_size=3, padding=1)]
+        	self.loc_layers += [nn.Conv2d(self.in_channels[i], self.num_anchors[i]*self.box_len, kernel_size=3, padding=1)]
         	self.cls_layers += [nn.Conv2d(self.in_channels[i], self.num_anchors[i]*self.num_classes, kernel_size=3, padding=1)]
 
     def forward(self, x):
@@ -36,7 +37,7 @@ class FPNSSD512(nn.Module):
         for i, x in enumerate(xs):
             loc_pred = self.loc_layers[i](x)
             loc_pred = loc_pred.permute(0,2,3,1).contiguous()
-            loc_preds.append(loc_pred.view(loc_pred.size(0),-1,4))
+            loc_preds.append(loc_pred.view(loc_pred.size(0),-1,self.box_len))
 
             cls_pred = self.cls_layers[i](x)
             cls_pred = cls_pred.permute(0,2,3,1).contiguous()

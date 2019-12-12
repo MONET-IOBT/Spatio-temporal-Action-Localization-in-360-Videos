@@ -42,7 +42,7 @@ class SphPriorBox(object):
     def forward(self):
         mean = []
         # TODO merge these
-        if self.version == 'sph_v2' or self.version == 'v3' or self.version == 'v4':
+        if self.version == 'sph_v2' or self.version == 'v3' or self.version == 'v5':
             for k, f in enumerate(self.feature_maps):
                 h,w = f
                 for i in range(h):
@@ -71,24 +71,15 @@ class SphPriorBox(object):
                             boxes.append([cx, cy, s_kx*sqrt(ar), s_ky/sqrt(ar)])
                             boxes.append([cx, cy, s_kx/sqrt(ar), s_ky*sqrt(ar)])
 
-                        if self.no_rotation:
-                            for box in boxes:
-                                mean += box
-                        else:
-                            # add rotation to all boxes
-                            for cx,cy,sx,sy in boxes:
-                                for l in range(self.num_rotations):
-                                    rot_x = 1./self.num_rotations*l
-                                    mean += [cx,cy,sx,sy,rot_x]
+                        for box in boxes:
+                            mean += box
+                        
 
         else:
             print('Not implemented')
             exit(-1)
         # back to torch land
-        if self.no_rotation:
-            output = torch.Tensor(mean).view(-1, 4)
-        else:
-            output = torch.Tensor(mean).view(-1, 5)
+        output = torch.Tensor(mean).view(-1, 4)
         if self.clip:
             output.clamp_(max=1, min=0)
         return output

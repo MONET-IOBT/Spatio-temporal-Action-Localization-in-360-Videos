@@ -12,7 +12,6 @@ from functools import lru_cache
 
 import sys
 sys.path.insert(0, '/home/bo/research/realtime-action-detection')
-from data import sph_v2 as cfg
 
 def genuv(h, w):
     u, v = np.meshgrid(np.arange(w), np.arange(h))
@@ -146,20 +145,22 @@ def uv2img_idx(uv, h, w, u_fov, v_fov, rot_x=0, rot_y=0, rot_z=0):
 
 
 class OmniDataset(data.Dataset):
-    def __init__(self, dataset, fov=120, outshape=(512, 1024),
-                 z_rotate=True, y_rotate=True, x_rotate=False,
+    def __init__(self, dataset, cfg=None, fov=120, outshape=(512, 512),
+                 z_rotate=True, y_rotate=True, x_rotate=True,
                  fix_aug=False):
         '''
         Convert classification dataset to omnidirectional version
         @dataset  dataset with same interface as torch.utils.data.Dataset
                   yield (PIL image, label) if indexing
         '''
+        assert(cfg is not None)
         self.dataset = dataset
         self.fov = fov
         self.outshape = outshape
         self.z_rotate = z_rotate
         self.y_rotate = y_rotate
         self.x_rotate = not cfg['no_rotation']#x_rotate
+        self.cfg = cfg
         self.name = dataset.name
 
         self.aug = None
@@ -181,7 +182,7 @@ class OmniDataset(data.Dataset):
             if self.aug is not None:
                 rot_y = self.aug[idx]['y_rotate']
             else:
-                rot_y = np.random.uniform(-np.pi, np.pi)
+                rot_y = np.random.uniform(-np.pi/2, np.pi/2)
         else:
             rot_y = 0
 
@@ -244,7 +245,7 @@ class OmniDataset(data.Dataset):
             elif cv < 0:
                 cv = -cv
                 cu = cu-0.5 if cu>=0.5 else cu+0.5
-            if cfg['no_rotation']:
+            if self.cfg['no_rotation']:
                 new_bboxes.append([cu-w/2,cv-h/2,cu+w/2,cv+h/2,ac_type])
             else:
                 new_bboxes.append([cu-w/2,cv-h/2,cu+w/2,cv+h/2,rot_x/np.pi/2+0.5,ac_type])

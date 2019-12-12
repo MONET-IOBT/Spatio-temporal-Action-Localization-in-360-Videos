@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from data import sph_v2 as cfg
 from ..sph_box_utils import sph_match, log_sum_exp
 
 class SphMultiBoxLoss(nn.Module):
@@ -28,7 +27,7 @@ class SphMultiBoxLoss(nn.Module):
     """
 
     def __init__(self, num_classes, overlap_thresh, prior_for_matching,
-                 bkg_label, neg_mining, neg_pos, neg_overlap, encode_target,
+                 bkg_label, neg_mining, neg_pos, neg_overlap, encode_target, cfg,
                  use_gpu=True):
         super(SphMultiBoxLoss, self).__init__()
         self.use_gpu = use_gpu
@@ -63,7 +62,7 @@ class SphMultiBoxLoss(nn.Module):
 
         # match priors (default boxes) and ground truth boxes
         with torch.no_grad():
-            box_len = priors.shape[1]
+            box_len = loc_data.shape[-1]
             if self.use_gpu:
                 loc_t = torch.cuda.FloatTensor(num, num_priors, box_len)
                 conf_t = torch.cuda.LongTensor(num, num_priors)
@@ -80,9 +79,6 @@ class SphMultiBoxLoss(nn.Module):
             if self.use_gpu:
                 loc_t = loc_t.cuda()
                 conf_t = conf_t.cuda()
-            # wrap targets
-            # loc_t = Variable(loc_t, requires_grad=False)
-            # conf_t = Variable(conf_t, requires_grad=False)
 
             pos = conf_t > 0
         #num_pos = pos.sum(keepdim=True)
@@ -98,6 +94,7 @@ class SphMultiBoxLoss(nn.Module):
             loc_p = loc_data[pos_idx].view(-1, 5)
             loc_t = loc_t[pos_idx].view(-1, 5)
         loss_l = F.smooth_l1_loss(loc_p, loc_t, reduction='sum')
+        loss_ro = F.smooth_l1_loss(loc_p[:,-1], loc_t[:,-1], reduction='sum')
         with torch.no_grad():
             # Compute max conf across batch for hard negative mining
             batch_conf = conf_data.view(-1, self.num_classes)
@@ -126,4 +123,5 @@ class SphMultiBoxLoss(nn.Module):
         N = float(num_pos.data.sum())
         loss_l /= N
         loss_c /= N
-        return loss_l, loss_c
+        loss_ro /= N
+        return loss_l, loss_c, loss_ro

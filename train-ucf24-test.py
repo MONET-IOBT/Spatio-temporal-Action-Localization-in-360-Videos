@@ -18,18 +18,18 @@ import torch.nn.init as init
 import argparse
 import torch.utils.data as data
 from data.omni_dataset import OmniUCF24, sph_detection_collate
-from data import v2, AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
+from data import v5, AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
 from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
 from model.ssd import build_ssd
-from model.sph_ssd import build_sph_ssd
+from model.sph_ssd import build_vgg_ssd
 from model.fpnssd.net import FPNSSD512
 import numpy as np
 import time
 from utils.evaluation import evaluate_detections
-from layers.box_utils import decode, nms
-# from layers.sph_box_utils import decode, nms
+# from layers.box_utils import decode, nms
+from layers.sph_box_utils import decode, nms
 from utils import  AverageMeter
 from torch.optim.lr_scheduler import MultiStepLR
 
@@ -39,12 +39,12 @@ def str2bool(v):
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
 parser.add_argument('--version', default='v2', help='conv11_2(v2) or pool6(v1) as last layer')
-parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
+parser.add_argument('--basenet', default='fpn_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=2, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--max_epoch', default=10, type=int, help='Number of training epochs')
@@ -79,7 +79,7 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 
 def main():
-    args.cfg = v2
+    args.cfg = v5
     args.train_sets = 'train'
     args.means = (104, 117, 123)
     num_classes = len(CLASSES) + 1
@@ -99,11 +99,11 @@ def main():
     if not os.path.isdir(args.save_root):
         os.makedirs(args.save_root)
 
-    if args.net_type == 'fpnssd512':
+    if args.basenet[:-14] == 'fpn':
         assert(args.ssd_dim == 512)
         net = FPNSSD512(args.num_classes)
     else:
-        net = build_sph_ssd(args.ssd_dim, args.num_classes, args.net_type)
+        net = build_vgg_ssd(args.ssd_dim, args.num_classes, args.net_type)
     
 
     def xavier(param):
@@ -128,12 +128,11 @@ def main():
         print('Loading base network...')
         net.fpn.load_state_dict(torch.load(pretrained_weights))
     elif args.net_type == 'fpnssd512':
-        pretrained_weights = args.data_root + 'ucf24/train_data/fpnssd512_20_trained.pth'
+        weights = torch.load(args.data_root +'ucf24/train_data/' + args.basenet)
         # delete some keys due to change of number of classes 21->25
-        weights = torch.load(pretrained_weights)
         useless_keys = []
         for key in weights:
-            if key.find('cls_layers') == 0:
+            if key.find('cls_layers') == 0 or key.find('loc_layers') == 0:
                 useless_keys.append(key)
         for key in useless_keys:
             del weights[key]
@@ -167,7 +166,7 @@ def main():
             params += [{'params':[param], 'lr': args.lr, 'weight_decay':args.weight_decay}]
 
     optimizer = optim.SGD(params, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-    criterion = SphMultiBoxLoss(args.num_classes, 0.5, True, 0, True, 3, 0.5, False, args.cuda)
+    criterion = SphMultiBoxLoss(args.num_classes, 0.5, True, 0, True, 3, 0.5, False, args.cfg, args.cuda)
     scheduler = MultiStepLR(optimizer, milestones=args.stepvalues, gamma=args.gamma)
     train(args, net, optimizer, criterion, scheduler)
 
@@ -186,12 +185,13 @@ def train(args, net, optimizer, criterion, scheduler):
     losses = AverageMeter()
     loc_losses = AverageMeter()
     cls_losses = AverageMeter()
+    rot_losses = AverageMeter()
 
     print('Loading Dataset...')
     train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means),
-                           AnnotationTransform(), input_type=args.input_type, outshape=(args.ssd_dim,2*args.ssd_dim))
+                           AnnotationTransform(), cfg=args.cfg, input_type=args.input_type, outshape=(args.ssd_dim,args.ssd_dim))
     val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means),
-                           AnnotationTransform(), input_type=args.input_type, outshape=(args.ssd_dim,2*args.ssd_dim))
+                           AnnotationTransform(), cfg=args.cfg, input_type=args.input_type, outshape=(args.ssd_dim,args.ssd_dim))
     
     print('Training SSD on', train_dataset.name)
 
@@ -221,16 +221,18 @@ def train(args, net, optimizer, criterion, scheduler):
             # backprop
             optimizer.zero_grad()
 
-            loss_l, loss_c = criterion(out, targets)
+            loss_l, loss_c, loss_r = criterion(out, targets)
             loss = loss_l + loss_c
             loss.backward()
             optimizer.step()
             scheduler.step()
             loc_loss = loss_l.item()
             conf_loss = loss_c.item()
+            rot_loss = loss_r.item()
             # print('Loss data type ',type(loc_loss))
             loc_losses.update(loc_loss)
             cls_losses.update(conf_loss)
+            rot_losses.update(rot_loss)
             losses.update((loc_loss + conf_loss)/2.0)
 
 
@@ -239,10 +241,10 @@ def train(args, net, optimizer, criterion, scheduler):
                 t1 = time.perf_counter()
                 batch_time.update(t1 - t0)
 
-                print_line = 'E{:02d} Iter {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) ' \
+                print_line = 'E{:02d} Iter {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) rot-loss {:.3f}({:.3f}) ' \
                              'avg-loss {:.3f}({:.3f}) Timer {:0.3f}({:0.3f})'.format(epoch_count,
                               iteration, args.max_iter, loc_losses.val, loc_losses.avg, cls_losses.val,
-                              cls_losses.avg, losses.val, losses.avg, batch_time.val, batch_time.avg)
+                              cls_losses.avg, rot_losses.val, rot_losses.avg, losses.val, losses.avg, batch_time.val, batch_time.avg)
 
                 torch.cuda.synchronize()
                 t0 = time.perf_counter()
@@ -350,7 +352,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                         continue
                     boxes = decoded_boxes.clone()
                     l_mask = c_mask.unsqueeze(1).expand_as(boxes)
-                    boxes = boxes[l_mask].view(-1, 4)
+                    boxes = boxes[l_mask].view(-1, 5)
                     # idx of highest scoring and non-overlapping boxes per class
                     ids, counts = nms(boxes, scores, args.nms_thresh, args.topk)  # idsn - ids after nms
                     scores = scores[ids[:counts]].cpu().numpy()
@@ -361,11 +363,11 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                     boxes[:,1] *= height
                     boxes[:,3] *= height
 
-                    for ik in range(boxes.shape[0]):
-                        boxes[ik, 0] = max(0, boxes[ik, 0])
-                        boxes[ik, 2] = min(width, boxes[ik, 2])
-                        boxes[ik, 1] = max(0, boxes[ik, 1])
-                        boxes[ik, 3] = min(height, boxes[ik, 3])
+                    # for ik in range(boxes.shape[0]):
+                    #     boxes[ik, 0] = max(0, boxes[ik, 0])
+                    #     boxes[ik, 2] = min(width, boxes[ik, 2])
+                    #     boxes[ik, 1] = max(0, boxes[ik, 1])
+                    #     boxes[ik, 3] = min(height, boxes[ik, 3])
 
                     cls_dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=True)
 
