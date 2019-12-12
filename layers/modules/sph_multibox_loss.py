@@ -94,7 +94,10 @@ class SphMultiBoxLoss(nn.Module):
             loc_p = loc_data[pos_idx].view(-1, 5)
             loc_t = loc_t[pos_idx].view(-1, 5)
         loss_l = F.smooth_l1_loss(loc_p, loc_t, reduction='sum')
-        loss_ro = F.smooth_l1_loss(loc_p[:,-1], loc_t[:,-1], reduction='sum')
+        if self.no_rotation:
+            loss_ro = loss_l
+        else:
+            loss_ro = F.smooth_l1_loss(loc_p[:,4], loc_t[:,4], reduction='sum')
         with torch.no_grad():
             # Compute max conf across batch for hard negative mining
             batch_conf = conf_data.view(-1, self.num_classes)

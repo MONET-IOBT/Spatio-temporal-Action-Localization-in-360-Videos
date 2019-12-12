@@ -44,7 +44,7 @@ parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=2, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=8, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--max_epoch', default=10, type=int, help='Number of training epochs')
@@ -64,7 +64,7 @@ parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation th
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
-parser.add_argument('--net_type', default='fpnssd512', help='conv2d or sphnet or ktn or fpnssd512')
+parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or ktn')
 
 ## Parse arguments
 args = parser.parse_args()
@@ -99,12 +99,6 @@ def main():
     if not os.path.isdir(args.save_root):
         os.makedirs(args.save_root)
 
-    if args.basenet[:-14] == 'fpn':
-        assert(args.ssd_dim == 512)
-        net = FPNSSD512(args.num_classes)
-    else:
-        net = build_vgg_ssd(args.ssd_dim, args.num_classes, args.net_type)
-    
 
     def xavier(param):
         init.xavier_uniform(param)
@@ -114,25 +108,27 @@ def main():
             xavier(m.weight.data)
             m.bias.data.zero_()
 
-
-    print('Initializing weights for extra layers and HEADs...')
-    # initialize newly added layers' weights with xavier method
-    if args.net_type != 'fpnssd512':
+    if args.basenet[:-14] == 'fpn':
+        assert(args.ssd_dim == 512)
+        net = FPNSSD512(args.num_classes, args.cfg)
+    else:
+        net = build_vgg_ssd(args.ssd_dim, args.num_classes, args.net_type)
         net.extras.apply(weights_init)
         net.loc.apply(weights_init)
         net.conf.apply(weights_init)
+        
 
     if args.input_type == 'fastOF':
         print('Download pretrained brox flow trained model weights and place them at:::=> ',args.data_root + 'ucf24/train_data/brox_wieghts.pth')
         pretrained_weights = args.data_root + 'ucf24/train_data/brox_wieghts.pth'
         print('Loading base network...')
         net.fpn.load_state_dict(torch.load(pretrained_weights))
-    elif args.net_type == 'fpnssd512':
+    elif args.basenet[:-14] == 'fpn':
         weights = torch.load(args.data_root +'ucf24/train_data/' + args.basenet)
         # delete some keys due to change of number of classes 21->25
         useless_keys = []
         for key in weights:
-            if key.find('cls_layers') == 0 or key.find('loc_layers') == 0:
+            if key.find('cls_layers') == 0 or (not args.cfg['no_rotation'] and key.find('loc_layers')==0):
                 useless_keys.append(key)
         for key in useless_keys:
             del weights[key]
@@ -296,6 +292,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
     print('Validating at ', iteration_num)
     num_images = len(val_dataset)
     num_classes = args.num_classes
+    box_len = 4 if args.cfg['no_rotation'] else 5
 
     det_boxes = [[] for _ in range(len(CLASSES))]
     gt_boxes = []
@@ -352,7 +349,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                         continue
                     boxes = decoded_boxes.clone()
                     l_mask = c_mask.unsqueeze(1).expand_as(boxes)
-                    boxes = boxes[l_mask].view(-1, 5)
+                    boxes = boxes[l_mask].view(-1, box_len)
                     # idx of highest scoring and non-overlapping boxes per class
                     ids, counts = nms(boxes, scores, args.nms_thresh, args.topk)  # idsn - ids after nms
                     scores = scores[ids[:counts]].cpu().numpy()
@@ -362,12 +359,6 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                     boxes[:,2] *= width
                     boxes[:,1] *= height
                     boxes[:,3] *= height
-
-                    # for ik in range(boxes.shape[0]):
-                    #     boxes[ik, 0] = max(0, boxes[ik, 0])
-                    #     boxes[ik, 2] = min(width, boxes[ik, 2])
-                    #     boxes[ik, 1] = max(0, boxes[ik, 1])
-                    #     boxes[ik, 3] = min(height, boxes[ik, 3])
 
                     cls_dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=True)
 

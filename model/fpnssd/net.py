@@ -8,24 +8,23 @@ import sys
 sys.path.insert(0, '/home/bo/research/realtime-action-detection')
 from model.fpnssd.fpn import FPN50
 from layers.functions.sph_prior_box import SphPriorBox
-from data import v5
 
 class FPNSSD512(nn.Module):
 
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, cfg):
         super(FPNSSD512, self).__init__()
         self.num_classes = num_classes
         self.num_anchors = (4, 6, 6, 6, 6, 4, 4)
         self.in_channels = (256, 256, 256, 256, 256, 256, 256)
 
         self.extractor = FPN50()
-        priorbox = SphPriorBox(v5)
+        priorbox = SphPriorBox(cfg)
         with torch.no_grad():
             self.priors = priorbox.forward().cuda()
         self.softmax = nn.Softmax(dim=1).cuda()
         self.loc_layers = nn.ModuleList()
         self.cls_layers = nn.ModuleList()
-        self.box_len = 4 if v5['no_rotation'] else 5
+        self.box_len = 4 if cfg['no_rotation'] else 5
         for i in range(len(self.in_channels)):
         	self.loc_layers += [nn.Conv2d(self.in_channels[i], self.num_anchors[i]*self.box_len, kernel_size=3, padding=1)]
         	self.cls_layers += [nn.Conv2d(self.in_channels[i], self.num_anchors[i]*self.num_classes, kernel_size=3, padding=1)]
