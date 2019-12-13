@@ -126,5 +126,4 @@ class SphMultiBoxLoss(nn.Module):
         N = float(num_pos.data.sum())
         loss_l /= N
         loss_c /= N
-        loss_ro /= N
         return loss_l, loss_c, loss_ro
