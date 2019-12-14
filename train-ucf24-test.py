@@ -20,9 +20,9 @@ import torch.utils.data as data
 from data.omni_dataset import OmniUCF24, sph_detection_collate
 from data import v5, AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
 from utils.augmentations import SSDAugmentation
-from layers.modules import MultiBoxLoss
+# from layers.modules import MultiBoxLoss
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
-from model.ssd import build_ssd
+# from model.ssd import build_ssd
 from model.sph_ssd import build_vgg_ssd
 from model.fpnssd.net import FPNSSD512
 import numpy as np
@@ -58,8 +58,8 @@ parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight dec
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
 parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom Server')
-parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -218,7 +218,7 @@ def train(args, net, optimizer, criterion, scheduler):
             optimizer.zero_grad()
 
             loss_l, loss_c, loss_r = criterion(out, targets)
-            loss = loss_l + loss_c
+            loss = loss_l + loss_c + loss_r
             loss.backward()
             optimizer.step()
             scheduler.step()
@@ -229,7 +229,7 @@ def train(args, net, optimizer, criterion, scheduler):
             loc_losses.update(loc_loss)
             cls_losses.update(conf_loss)
             rot_losses.update(rot_loss)
-            losses.update((loc_loss + conf_loss)/2.0)
+            losses.update((loc_loss + conf_loss + rot_loss)/2.0)
 
 
             if iteration % args.print_step == 0 and iteration>0:
@@ -247,9 +247,6 @@ def train(args, net, optimizer, criterion, scheduler):
                 log_file.write(print_line+'\n')
                 print(print_line)
 
-                # if args.visdom and args.send_images_to_visdom:
-                #     random_batch_index = np.random.randint(images.size(0))
-                #     viz.image(images.data[random_batch_index].cpu().numpy())
                 itr_count += 1
 
                 if itr_count % args.loss_reset_step == 0 and itr_count > 0:

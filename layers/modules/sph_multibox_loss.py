@@ -54,7 +54,10 @@ class SphMultiBoxLoss(nn.Module):
             ground_truth (tensor): Ground truth boxes and labels for a batch,
                 shape: [batch_size,num_objs,6] (last idx is the label).
         """
-        loc_data, conf_data, priors = predictions
+        if self.no_rotation:
+            loc_data, conf_data, priors = predictions
+        else:
+            loc_data, conf_data, priors, rot_data = predictions
         num = loc_data.size(0)
         priors = priors[:loc_data.size(1), :]
         num_priors = (priors.size(0))
@@ -62,23 +65,25 @@ class SphMultiBoxLoss(nn.Module):
 
         # match priors (default boxes) and ground truth boxes
         with torch.no_grad():
-            box_len = loc_data.shape[-1]
             if self.use_gpu:
-                loc_t = torch.cuda.FloatTensor(num, num_priors, box_len)
+                loc_t = torch.cuda.FloatTensor(num, num_priors, 4)
                 conf_t = torch.cuda.LongTensor(num, num_priors)
+                loc_t = torch.cuda.FloatTensor(num, num_priors, 1)
             else:
-                loc_t = torch.Tensor(num, num_priors, box_len)
+                loc_t = torch.Tensor(num, num_priors, 4)
                 conf_t = torch.LongTensor(num, num_priors)
+                loc_t = torch.Tensor(num, num_priors, 1)
             for idx in range(num):
                 truths = targets[idx][:, :-1].data # box annotation
                 labels = targets[idx][:, -1].data # action type
                 defaults = priors.data
                 sph_match(self.threshold, truths, defaults, self.variance, labels,
-                    loc_t, conf_t, idx)
+                    loc_t, conf_t, rot_t, idx)
 
             if self.use_gpu:
                 loc_t = loc_t.cuda()
                 conf_t = conf_t.cuda()
+                rot_t = rot_t.cuda()
 
             pos = conf_t > 0
         #num_pos = pos.sum(keepdim=True)
@@ -87,17 +92,15 @@ class SphMultiBoxLoss(nn.Module):
         # Shape: [batch,num_priors,4]
         # only extract positive/foreground samples
         pos_idx = pos.unsqueeze(pos.dim()).expand_as(loc_data)
+        loc_p = loc_data[pos_idx].view(-1, 4)
+        loc_t = loc_t[pos_idx].view(-1, 4)
+        loss_l = F.smooth_l1_loss(loc_p[:,:4], loc_t[:,:4], reduction='sum')
         if self.no_rotation:
-            loc_p = loc_data[pos_idx].view(-1, 4)
-            loc_t = loc_t[pos_idx].view(-1, 4)
+            loss_ro = 0
         else:
-            loc_p = loc_data[pos_idx].view(-1, 5)
-            loc_t = loc_t[pos_idx].view(-1, 5)
-        loss_l = F.smooth_l1_loss(loc_p, loc_t, reduction='sum')
-        if self.no_rotation:
-            loss_ro = loss_l
-        else:
-            loss_ro = F.smooth_l1_loss(loc_p[:,4], loc_t[:,4], reduction='sum')
+            rot_p = rot_data[pos_idx].view(-1, 1)
+            rot_t = rot_t[pos_idx].view(-1, 1)
+            loss_ro = F.smooth_l1_loss(rot_p[:,4], rot_t[:,4], reduction='sum')
         with torch.no_grad():
             # Compute max conf across batch for hard negative mining
             batch_conf = conf_data.view(-1, self.num_classes)
@@ -126,4 +129,5 @@ class SphMultiBoxLoss(nn.Module):
         N = float(num_pos.data.sum())
         loss_l /= N
         loss_c /= N
+        loss_ro /= N
         return loss_l, loss_c, loss_ro
