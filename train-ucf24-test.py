@@ -86,7 +86,7 @@ def main():
     args.num_classes = num_classes
     args.stepvalues = [int(val) for val in args.stepvalues.split(',')]
     args.loss_reset_step = 30
-    args.eval_step = 5000
+    args.eval_step = 1000
     args.print_step = 10
 
     ## Define the experiment Name will used to same directory and ENV for visdom
@@ -224,7 +224,7 @@ def train(args, net, optimizer, criterion, scheduler):
             scheduler.step()
             loc_loss = loss_l.item()
             conf_loss = loss_c.item()
-            rot_loss = loss_r.item()
+            rot_loss = 0 if loss_r == 0 else loss_r.item() 
             # print('Loss data type ',type(loc_loss))
             loc_losses.update(loc_loss)
             cls_losses.update(conf_loss)
@@ -289,7 +289,6 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
     print('Validating at ', iteration_num)
     num_images = len(val_dataset)
     num_classes = args.num_classes
-    box_len = 4 if args.cfg['no_rotation'] else 5
 
     det_boxes = [[] for _ in range(len(CLASSES))]
     gt_boxes = []
@@ -346,7 +345,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                         continue
                     boxes = decoded_boxes.clone()
                     l_mask = c_mask.unsqueeze(1).expand_as(boxes)
-                    boxes = boxes[l_mask].view(-1, box_len)
+                    boxes = boxes[l_mask].view(-1, 4)
                     # idx of highest scoring and non-overlapping boxes per class
                     ids, counts = nms(boxes, scores, args.nms_thresh, args.topk)  # idsn - ids after nms
                     scores = scores[ids[:counts]].cpu().numpy()
@@ -371,6 +370,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                 torch.cuda.synchronize()
                 te = time.perf_counter()
                 print('NMS stuff Time {:0.3f}'.format(te - tf))
+            if val_itr > 500:break
     print('Evaluating detections for itration number ', iteration_num)
     return evaluate_detections(gt_boxes, det_boxes, CLASSES, iou_thresh=iou_thresh)
 

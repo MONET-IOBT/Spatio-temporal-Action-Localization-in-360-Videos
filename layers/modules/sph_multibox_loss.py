@@ -54,7 +54,7 @@ class SphMultiBoxLoss(nn.Module):
             ground_truth (tensor): Ground truth boxes and labels for a batch,
                 shape: [batch_size,num_objs,6] (last idx is the label).
         """
-        if self.no_rotation:
+        if len(predictions) == 3:
             loc_data, conf_data, priors = predictions
         else:
             loc_data, conf_data, priors, rot_data = predictions
@@ -68,11 +68,11 @@ class SphMultiBoxLoss(nn.Module):
             if self.use_gpu:
                 loc_t = torch.cuda.FloatTensor(num, num_priors, 4)
                 conf_t = torch.cuda.LongTensor(num, num_priors)
-                loc_t = torch.cuda.FloatTensor(num, num_priors, 1)
+                rot_t = torch.cuda.FloatTensor(num, num_priors)
             else:
                 loc_t = torch.Tensor(num, num_priors, 4)
                 conf_t = torch.LongTensor(num, num_priors)
-                loc_t = torch.Tensor(num, num_priors, 1)
+                rot_t = torch.Tensor(num, num_priors, 1)
             for idx in range(num):
                 truths = targets[idx][:, :-1].data # box annotation
                 labels = targets[idx][:, -1].data # action type
@@ -95,12 +95,12 @@ class SphMultiBoxLoss(nn.Module):
         loc_p = loc_data[pos_idx].view(-1, 4)
         loc_t = loc_t[pos_idx].view(-1, 4)
         loss_l = F.smooth_l1_loss(loc_p[:,:4], loc_t[:,:4], reduction='sum')
-        if self.no_rotation:
+        if len(predictions) == 3:
             loss_ro = 0
         else:
-            rot_p = rot_data[pos_idx].view(-1, 1)
-            rot_t = rot_t[pos_idx].view(-1, 1)
-            loss_ro = F.smooth_l1_loss(rot_p[:,4], rot_t[:,4], reduction='sum')
+            rot_p = rot_data[pos].view(-1, 1)
+            rot_t = rot_t[pos].view(-1, 1)
+            loss_ro = F.smooth_l1_loss(rot_p, rot_t, reduction='sum')
         with torch.no_grad():
             # Compute max conf across batch for hard negative mining
             batch_conf = conf_data.view(-1, self.num_classes)

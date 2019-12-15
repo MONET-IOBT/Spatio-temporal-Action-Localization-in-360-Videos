@@ -16,6 +16,7 @@ class FPNSSD512(nn.Module):
         self.num_classes = num_classes
         self.num_anchors = (4, 6, 6, 6, 6, 4, 4)
         self.in_channels = (256, 256, 256, 256, 256, 256, 256)
+        self.cfg = cfg
 
         self.extractor = FPN50()
         priorbox = SphPriorBox(cfg)
@@ -48,15 +49,15 @@ class FPNSSD512(nn.Module):
         loc_preds = torch.cat(loc_preds, 1)
         cls_preds = torch.cat(cls_preds, 1)
 
-        if not cfg['no_rotation']:
+        if not self.cfg['no_rotation']:
             rot_preds = []
             for i, x in enumerate(xs):
                 rot_pred = self.rot_layers[i](x)
                 rot_pred = rot_pred.permute(0,2,3,1).contiguous()
-                rot_preds.append(rot_pred.view(rot_pred.size(0),-1,1))
+                rot_preds.append(rot_pred.view(rot_pred.size(0),-1))
             rot_preds = torch.cat(rot_preds, 1)
 
-        if cfg['no_rotation']:
+        if self.cfg['no_rotation']:
             return loc_preds, cls_preds, self.priors
         else:
             return loc_preds, cls_preds, self.priors, rot_preds 

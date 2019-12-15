@@ -122,13 +122,14 @@ def sph_match(threshold, truths, priors, variances, labels, loc_t, conf_t, rot_t
     for j in range(best_prior_idx.size(0)):
         best_truth_idx[best_prior_idx[j]] = j
     matches = truths[best_truth_idx,:4]          # Shape: [num_priors,4]
-    matches_rot = truths[best_truth_idx,4]
+    if truths.shape[-1] == 5:
+        matches_rot = truths[best_truth_idx,4]
+        rot_t[idx] = matches_rot
     conf = labels[best_truth_idx] + 1         # Shape: [num_priors]
     conf[best_truth_overlap < threshold] = 0  # label as background
     loc = encode(matches, priors, variances)
     loc_t[idx] = loc    # [num_priors,5] encoded offsets to learn
     conf_t[idx] = conf  # [num_priors] top class label for each prior
-    rot_t[idx] = matches_rot
 
 
 def encode(matched, priors, variances):
