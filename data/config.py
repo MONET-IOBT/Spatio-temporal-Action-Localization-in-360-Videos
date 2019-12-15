@@ -27,7 +27,7 @@ v5 = {
 
     'name' : 'v5',
 
-    'no_rotation' : True,
+    'no_rotation' : False,
 }
 
 #SSD512 CONFIGS

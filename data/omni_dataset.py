@@ -159,7 +159,7 @@ class OmniDataset(data.Dataset):
         self.outshape = outshape
         self.z_rotate = z_rotate
         self.y_rotate = y_rotate
-        self.x_rotate = not cfg['no_rotation']#x_rotate
+        self.x_rotate = x_rotate
         self.cfg = cfg
         self.name = dataset.name
 
