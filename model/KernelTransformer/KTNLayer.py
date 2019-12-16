@@ -98,7 +98,11 @@ class KTNConv(nn.Module):
 
             t = i * self.tied_weights
             b = t + self.tied_weights
-            outputs[:,:,t:b,:] = F.conv2d(x, kernel, bias, dilation=(dilation_h, dilation_w))
+            print(i,x.shape,kernel.shape,b-t)
+            tmp = F.conv2d(x, kernel, bias, dilation=(dilation_h, dilation_w))
+            print(tmp.shape)
+            outputs[:,:,t:b,:] = tmp
+            # outputs[:,:,t:b,:] = F.conv2d(x, kernel, bias, dilation=(dilation_h, dilation_w))
         return outputs
 
     def update_group(self, group):

@@ -18,7 +18,7 @@ import torch.nn.init as init
 import argparse
 import torch.utils.data as data
 from data.omni_dataset import OmniUCF24, sph_detection_collate
-from data import v5, AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
+from data import v3,v5, AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
 from utils.augmentations import SSDAugmentation
 # from layers.modules import MultiBoxLoss
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
@@ -79,7 +79,7 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 
 def main():
-    args.cfg = v5
+    args.cfg = v3
     args.train_sets = 'train'
     args.means = (104, 117, 123)
     num_classes = len(CLASSES) + 1
@@ -185,9 +185,9 @@ def train(args, net, optimizer, criterion, scheduler):
 
     print('Loading Dataset...')
     train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means),
-                           AnnotationTransform(), cfg=args.cfg, input_type=args.input_type, outshape=(args.ssd_dim,args.ssd_dim))
+                           AnnotationTransform(), cfg=args.cfg, input_type=args.input_type, outshape=(args.ssd_dim,2*args.ssd_dim))
     val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means),
-                           AnnotationTransform(), cfg=args.cfg, input_type=args.input_type, outshape=(args.ssd_dim,args.ssd_dim))
+                           AnnotationTransform(), cfg=args.cfg, input_type=args.input_type, outshape=(args.ssd_dim,2*args.ssd_dim))
     
     print('Training SSD on', train_dataset.name)
 

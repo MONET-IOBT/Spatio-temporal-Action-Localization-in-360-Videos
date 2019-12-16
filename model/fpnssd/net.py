@@ -8,6 +8,8 @@ import sys
 sys.path.insert(0, '/home/bo/research/realtime-action-detection')
 from model.fpnssd.fpn import FPN50
 from layers.functions.sph_prior_box import SphPriorBox
+from model.spherenet.sphere_cnn import SphereConv2D, SphereMaxPool2D
+from model.KernelTransformer.KTNLayer import KTNConv
 
 class FPNSSD512(nn.Module):
 
@@ -32,6 +34,30 @@ class FPNSSD512(nn.Module):
             self.rot_layers = nn.ModuleList()
             for i in range(len(self.in_channels)):
                 self.rot_layers += [nn.Conv2d(self.in_channels[i], self.num_anchors[i], kernel_size=3, padding=1)]
+
+    def transform(self):
+        def transform1(layer,s):
+            for i,l in enumerate(layer):
+                stride = l.conv2.stride[0]
+                in_channels = l.conv2.in_channels
+                out_channels = l.conv2.out_channels
+                layer[i].conv2 = SphereConv2D(in_channels, out_channels, stride=stride)
+                # layer[i].conv2 = build_ktnconv(s, layer[i].conv2.weight, None)
+        transform1(self.extractor.layer1,[128,128])
+        transform1(self.extractor.layer2,[128,128])
+        transform1(self.extractor.layer3,[64,64])
+        transform1(self.extractor.layer4,[32,32])
+
+        def transform2(layer, s):
+            stride = layer.stride[0]
+            in_channels = layer.in_channels
+            out_channels = layer.out_channels
+            return SphereConv2D(in_channels, out_channels, stride=stride)
+            # return build_ktnconv(s, layer.weight, layer.bias)
+        self.extractor.conv6 = transform2(self.extractor.conv6, [16,16])
+        self.extractor.conv7 = transform2(self.extractor.conv7, [8,8])
+        self.extractor.conv8 = transform2(self.extractor.conv8, [4,4])
+        self.extractor.conv9 = transform2(self.extractor.conv9, [2,2])
 
     def forward(self, x):
         loc_preds = []
@@ -62,6 +88,29 @@ class FPNSSD512(nn.Module):
         else:
             return loc_preds, cls_preds, self.priors, rot_preds 
 
+FOV = 120
+TIED_WEIGHT = 4
+
+def build_ktnconv(imgSize, kernel, bias):
+
+    fov = FOV
+    ih,iw = imgSize
+    tied_weights = 1 if ih%TIED_WEIGHT!=0 or iw%TIED_WEIGHT!=0 else TIED_WEIGHT
+    dilation = 2
+    arch = 'bilinear' 
+    kernel_shape_type = "dilated"
+
+    sys.stderr.write("Arch: {0}, tied_weights: {1}\n".format(arch, tied_weights))
+    ktnconv = KTNConv(kernel,
+                      bias,
+                      sphereH=ih,
+                      imgW=iw,
+                      fov=fov,
+                      dilation=dilation,
+                      tied_weights=tied_weights,
+                      arch=arch,
+                      kernel_shape_type=kernel_shape_type)
+    return ktnconv
 
 def test():
     net = FPNSSD512(25)

@@ -147,7 +147,7 @@ def uv2img_idx(uv, h, w, u_fov, v_fov, rot_x=0, rot_y=0, rot_z=0):
 
 class OmniDataset(data.Dataset):
     def __init__(self, dataset, cfg=None, fov=120, outshape=(512, 512),
-                 z_rotate=True, y_rotate=True, x_rotate=True,
+                 z_rotate=True, y_rotate=True, x_rotate=False,
                  fix_aug=False):
         '''
         Convert classification dataset to omnidirectional version
