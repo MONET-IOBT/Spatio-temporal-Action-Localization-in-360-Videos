@@ -17,14 +17,18 @@ import torch.optim as optim
 import torch.nn.init as init
 import argparse
 import torch.utils.data as data
-from data import sph_v2, AnnotationTransform, CLASSES, BaseTransform
 from data.omni_dataset import OmniUCF24, sph_detection_collate
+from data import v5, AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
 from utils.augmentations import SSDAugmentation
+# from layers.modules import MultiBoxLoss
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
-from model.sph_ssd import build_sph_ssd
+# from model.ssd import build_ssd
+from model.sph_ssd import build_vgg_ssd
+from model.fpnssd.net import FPNSSD512
 import numpy as np
 import time
 from utils.evaluation import evaluate_detections
+# from layers.box_utils import decode, nms
 from layers.sph_box_utils import decode, nms
 from utils import  AverageMeter
 from torch.optim.lr_scheduler import MultiStepLR
@@ -35,33 +39,32 @@ def str2bool(v):
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
 parser.add_argument('--version', default='v2', help='conv11_2(v2) or pool6(v1) as last layer')
-parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
+parser.add_argument('--basenet', default='fpn_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
-parser.add_argument('--ssd_dim', default=300, type=int, help='Input Size for SSD') # only support 300 now
+parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=32, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=8, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
-parser.add_argument('--num_workers', default=4, type=int, help='Number of workers used in dataloading')
-parser.add_argument('--max_iter', default=120000, type=int, help='Number of training iterations')
+parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
+parser.add_argument('--max_epoch', default=10, type=int, help='Number of training epochs')
 parser.add_argument('--man_seed', default=123, type=int, help='manualseed for reproduction')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
-parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, help='initial learning rate')
+parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
-parser.add_argument('--stepvalues', default='30000,60000,90000', type=str, help='iter numbers where learing rate to be dropped')
+parser.add_argument('--stepvalues', default='30000,60000,100000', type=str, help='iter numbers where learing rate to be dropped')
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
 parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom Server')
 parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
 parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
-# set threshold to rect_thresh x angle_thresh = 0.5 * 0.85 = 0.43
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
-# set threshold to rect_thresh x angle_thresh = 0.45 * 0.85 = 0.38
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
+parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or ktn')
 
 ## Parse arguments
 args = parser.parse_args()
@@ -76,14 +79,14 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 
 def main():
-    args.cfg = sph_v2
+    args.cfg = v5
     args.train_sets = 'train'
     args.means = (104, 117, 123)
     num_classes = len(CLASSES) + 1
     args.num_classes = num_classes
     args.stepvalues = [int(val) for val in args.stepvalues.split(',')]
     args.loss_reset_step = 30
-    args.eval_step = 1000
+    args.eval_step = 5000
     args.print_step = 10
 
     ## Define the experiment Name will used to same directory and ENV for visdom
@@ -96,10 +99,6 @@ def main():
     if not os.path.isdir(args.save_root):
         os.makedirs(args.save_root)
 
-    net = build_sph_ssd(300, args.num_classes, False)
-
-    if args.cuda:
-        net = net.cuda()
 
     def xavier(param):
         init.xavier_uniform(param)
@@ -109,22 +108,44 @@ def main():
             xavier(m.weight.data)
             m.bias.data.zero_()
 
-
-    print('Initializing weights for extra layers and HEADs...')
-    # initialize newly added layers' weights with xavier method
-    net.extras.apply(weights_init)
-    net.loc.apply(weights_init)
-    net.conf.apply(weights_init)
+    if args.basenet[:-14] == 'fpn':
+        assert(args.ssd_dim == 512)
+        net = FPNSSD512(args.num_classes, args.cfg)
+    else:
+        net = build_vgg_ssd(args.ssd_dim, args.num_classes, args.net_type)
+        net.extras.apply(weights_init)
+        net.loc.apply(weights_init)
+        net.conf.apply(weights_init)
+        
 
     if args.input_type == 'fastOF':
         print('Download pretrained brox flow trained model weights and place them at:::=> ',args.data_root + 'ucf24/train_data/brox_wieghts.pth')
         pretrained_weights = args.data_root + 'ucf24/train_data/brox_wieghts.pth'
         print('Loading base network...')
-        net.load_state_dict(torch.load(pretrained_weights))
+        net.fpn.load_state_dict(torch.load(pretrained_weights))
+    elif args.basenet[:-14] == 'fpn':
+        weights = torch.load(args.data_root +'ucf24/train_data/' + args.basenet)
+        # delete some keys due to change of number of classes 21->25
+        useless_keys = []
+        for key in weights:
+            if key.find('cls_layers') == 0 or (not args.cfg['no_rotation'] and key.find('loc_layers')==0):
+                useless_keys.append(key)
+        for key in useless_keys:
+            del weights[key]
+        model_dict = net.state_dict()
+        model_dict.update(weights)
+        print('Loading base network...')
+        net.load_state_dict(model_dict)
     else:
         vgg_weights = torch.load(args.data_root +'ucf24/train_data/' + args.basenet)
         print('Loading base network...')
         net.vgg.load_state_dict(vgg_weights)
+
+    if args.net_type == 'ktn':
+        net.transform()
+
+    if args.cuda:
+        net = net.cuda()
 
     args.data_root += args.dataset + '/'
 
@@ -141,7 +162,7 @@ def main():
             params += [{'params':[param], 'lr': args.lr, 'weight_decay':args.weight_decay}]
 
     optimizer = optim.SGD(params, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-    criterion = SphMultiBoxLoss(args.num_classes, 0.5, True, 0, True, 3, 0.5, False, args.cuda)
+    criterion = SphMultiBoxLoss(args.num_classes, 0.5, True, 0, True, 3, 0.5, False, args.cfg, args.cuda)
     scheduler = MultiStepLR(optimizer, milestones=args.stepvalues, gamma=args.gamma)
     train(args, net, optimizer, criterion, scheduler)
 
@@ -160,31 +181,29 @@ def train(args, net, optimizer, criterion, scheduler):
     losses = AverageMeter()
     loc_losses = AverageMeter()
     cls_losses = AverageMeter()
+    rot_losses = AverageMeter()
 
     print('Loading Dataset...')
-    # train_dataset = UCF24Detection(args.data_root, args.train_sets, SSDAugmentation(args.ssd_dim, args.means),
-    #                                AnnotationTransform(), input_type=args.input_type)
-    # val_dataset = UCF24Detection(args.data_root, 'test', BaseTransform(args.ssd_dim, args.means),
-    #                              AnnotationTransform(), input_type=args.input_type,
-    #                              full_test=False)
-    train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(args.ssd_dim, args.means),
-                           AnnotationTransform(), input_type=args.input_type)
-    val_dataset = OmniUCF24(args.data_root, 'test', SSDAugmentation(args.ssd_dim, args.means),
-                           AnnotationTransform(), input_type=args.input_type)
-    epoch_size = len(train_dataset) // args.batch_size
-    print('Training SSD on', args.dataset)
+    train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means),
+                           AnnotationTransform(), cfg=args.cfg, input_type=args.input_type, outshape=(args.ssd_dim,args.ssd_dim))
+    val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means),
+                           AnnotationTransform(), cfg=args.cfg, input_type=args.input_type, outshape=(args.ssd_dim,args.ssd_dim))
+    
+    print('Training SSD on', train_dataset.name)
 
     batch_iterator = None
     train_data_loader = data.DataLoader(train_dataset, args.batch_size, num_workers=args.num_workers,
-                                  shuffle=True, collate_fn=sph_detection_collate, pin_memory=True)
-    val_data_loader = data.DataLoader(val_dataset, 32, num_workers=args.num_workers,
-                                 shuffle=False, collate_fn=sph_detection_collate, pin_memory=True)
+                                  shuffle=True, collate_fn=detection_collate, pin_memory=True)
+    val_data_loader = data.DataLoader(val_dataset, 2, num_workers=1,
+                                 shuffle=False, collate_fn=detection_collate, pin_memory=True)
     itr_count = 0
+    args.max_iter = args.max_epoch * (len(train_dataset) // args.batch_size)
+    epoch_count = 0
     torch.cuda.synchronize()
     t0 = time.perf_counter()
     iteration = 0
     while iteration <= args.max_iter:
-        for i, (images, targets) in enumerate(train_data_loader):
+        for i, (images, targets, _) in enumerate(train_data_loader):
 
             if iteration > args.max_iter:
                 break
@@ -192,23 +211,25 @@ def train(args, net, optimizer, criterion, scheduler):
             if args.cuda:
                 images = images.cuda(0, non_blocking=True)
                 targets = [anno.cuda(0, non_blocking=True) for anno in targets]
-
+                
             # forward
             out = net(images)
             # backprop
             optimizer.zero_grad()
 
-            loss_l, loss_c = criterion(out, targets)
-            loss = loss_l + loss_c
+            loss_l, loss_c, loss_r = criterion(out, targets)
+            loss = loss_l + loss_c + loss_r
             loss.backward()
             optimizer.step()
             scheduler.step()
             loc_loss = loss_l.item()
             conf_loss = loss_c.item()
+            rot_loss = 0 if loss_r == 0 else loss_r.item() 
             # print('Loss data type ',type(loc_loss))
             loc_losses.update(loc_loss)
             cls_losses.update(conf_loss)
-            losses.update((loc_loss + conf_loss)/2.0)
+            rot_losses.update(rot_loss)
+            losses.update((loc_loss + conf_loss + rot_loss)/2.0)
 
 
             if iteration % args.print_step == 0 and iteration>0:
@@ -216,19 +237,16 @@ def train(args, net, optimizer, criterion, scheduler):
                 t1 = time.perf_counter()
                 batch_time.update(t1 - t0)
 
-                print_line = 'Itration {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) ' \
-                             'average-loss {:.3f}({:.3f}) Timer {:0.3f}({:0.3f})'.format(
+                print_line = 'E{:02d} Iter {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) rot-loss {:.3f}({:.3f}) ' \
+                             'avg-loss {:.3f}({:.3f}) Timer {:0.3f}({:0.3f})'.format(epoch_count,
                               iteration, args.max_iter, loc_losses.val, loc_losses.avg, cls_losses.val,
-                              cls_losses.avg, losses.val, losses.avg, batch_time.val, batch_time.avg)
+                              cls_losses.avg, rot_losses.val, rot_losses.avg, losses.val, losses.avg, batch_time.val, batch_time.avg)
 
                 torch.cuda.synchronize()
                 t0 = time.perf_counter()
                 log_file.write(print_line+'\n')
                 print(print_line)
 
-                # if args.visdom and args.send_images_to_visdom:
-                #     random_batch_index = np.random.randint(images.size(0))
-                #     viz.image(images.data[random_batch_index].cpu().numpy())
                 itr_count += 1
 
                 if itr_count % args.loss_reset_step == 0 and itr_count > 0:
@@ -262,7 +280,7 @@ def train(args, net, optimizer, criterion, scheduler):
                 prt_str = '\nValidation TIME::: {:0.3f}\n\n'.format(t0-tvs)
                 print(prt_str)
                 log_file.write(ptr_str)
-
+        epoch_count += 1
     log_file.close()
 
 
@@ -276,7 +294,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
     gt_boxes = []
     print_time = True
     batch_iterator = None
-    val_step = 100
+    val_step = 1000
     count = 0
     torch.cuda.synchronize()
     ts = time.perf_counter()
@@ -288,13 +306,13 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
             torch.cuda.synchronize()
             t1 = time.perf_counter()
 
-            images, targets = next(batch_iterator)
+            images, targets, _ = next(batch_iterator)
             batch_size = images.size(0)
             height, width = images.size(2), images.size(3)
 
             if args.cuda:
                 images = images.cuda(0, non_blocking=True)
-
+            
             output = net(images)
 
             loc_data = output[0]
@@ -305,24 +323,19 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                 torch.cuda.synchronize()
                 tf = time.perf_counter()
                 print('Forward Time {:0.3f}'.format(tf-t1))
-
+            
             for b in range(batch_size):
-                # get the boxes of each image
                 gt = targets[b].numpy()
                 gt[:,0] *= width
                 gt[:,2] *= width
                 gt[:,1] *= height
                 gt[:,3] *= height
-                if gt.shape[1] == 6:
-                    gt[:,4] = np.pi*2*gt[:,4] - np.pi
                 gt_boxes.append(gt)
-                # obtain the actual prediction in point form
                 decoded_boxes = decode(loc_data[b].data, prior_data.data, args.cfg['variance']).clone()
                 conf_scores = net.softmax(conf_preds[b]).data.clone()
                 # print(conf_scores.sum(1), conf_scores.shape)
-                # num_classes = 1 + len(CLASS)
                 for cl_ind in range(1, num_classes):
-                    scores = conf_scores[:, cl_ind].squeeze() # [num_priors,]
+                    scores = conf_scores[:, cl_ind].squeeze()
                     c_mask = scores.gt(args.conf_thresh)  # greater than minmum threshold
                     scores = scores[c_mask].squeeze()
                     # print('scores size',scores.size())
@@ -330,15 +343,11 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                         # print(len(''), ' dim ==0 ')
                         det_boxes[cl_ind - 1].append(np.asarray([]))
                         continue
-                    boxes = decoded_boxes.clone() # [num_priors, 5]
+                    boxes = decoded_boxes.clone()
                     l_mask = c_mask.unsqueeze(1).expand_as(boxes)
-                    if gt.shape[1] == 6:
-                        boxes = boxes[l_mask].view(-1, 5) # the boxes with score higher than threshold
-                    else:
-                        boxes = boxes[l_mask].view(-1, 4) # the boxes with score higher than threshold
+                    boxes = boxes[l_mask].view(-1, 4)
                     # idx of highest scoring and non-overlapping boxes per class
                     ids, counts = nms(boxes, scores, args.nms_thresh, args.topk)  # idsn - ids after nms
-                    # remaining boxes after nms
                     scores = scores[ids[:counts]].cpu().numpy()
                     boxes = boxes[ids[:counts]].cpu().numpy()
                     # print('boxes sahpe',boxes.shape)
@@ -346,17 +355,9 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                     boxes[:,2] *= width
                     boxes[:,1] *= height
                     boxes[:,3] *= height
-                    if boxes.shape[1]==5:
-                        boxes[:,4] = np.pi*2*boxes[:,4] - np.pi
-
-                    # for ik in range(boxes.shape[0]):
-                    #     boxes[ik, 0] = max(0, boxes[ik, 0])
-                    #     boxes[ik, 2] = min(width, boxes[ik, 2])
-                    #     boxes[ik, 1] = max(0, boxes[ik, 1])
-                    #     boxes[ik, 3] = min(height, boxes[ik, 3])
 
                     cls_dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=True)
-                    
+
                     det_boxes[cl_ind-1].append(cls_dets)
                 count += 1
             if val_itr%val_step == 0:
@@ -369,7 +370,6 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                 torch.cuda.synchronize()
                 te = time.perf_counter()
                 print('NMS stuff Time {:0.3f}'.format(te - tf))
-
     print('Evaluating detections for itration number ', iteration_num)
     return evaluate_detections(gt_boxes, det_boxes, CLASSES, iou_thresh=iou_thresh)
 

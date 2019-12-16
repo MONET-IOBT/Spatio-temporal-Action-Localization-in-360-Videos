@@ -12,6 +12,7 @@ from functools import lru_cache
 
 import sys
 sys.path.insert(0, '/home/bo/research/realtime-action-detection')
+from data import v5
 
 def genuv(h, w):
     u, v = np.meshgrid(np.arange(w), np.arange(h))
@@ -338,7 +339,7 @@ if __name__ == '__main__':
 
     if args.dataset == 'OmniUCF24':
         dataset = OmniUCF24(args.data_root, args.train_sets, BaseTransform(args.ssd_dim, args.means),
-                           AnnotationTransform(), input_type=args.input_type, fix_aug=True)
+                           AnnotationTransform(), cfg=v5, input_type=args.input_type, fix_aug=True)
     else:
         exit(0)
 
