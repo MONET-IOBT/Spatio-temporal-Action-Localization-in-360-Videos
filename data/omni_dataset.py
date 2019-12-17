@@ -1,6 +1,7 @@
 # Mathematical
 import numpy as np
 from scipy.ndimage.interpolation import map_coordinates
+import cv2
 
 # Pytorch
 import torch
@@ -138,17 +139,19 @@ def uv2img_idx(uv, h, w, u_fov, v_fov, rot_x=0, rot_y=0, rot_z=0):
     y = y * h / (2 * np.tan(v_fov / 2)) + h / 2
 
     invalid = (u < -u_fov / 2) | (u > u_fov / 2) |\
-              (v < -v_fov / 2) | (v > v_fov / 2)
+              (v < -v_fov / 2) | (v > v_fov / 2) 
     x[invalid] = -1
     y[invalid] = -1
 
-    return np.stack([y, x], axis=0)
+    invalid = (x < 0) | (x > w) | (y < 0) | (y > h)
+
+    return np.stack([y, x], axis=0),invalid
 
 
 class OmniDataset(data.Dataset):
-    def __init__(self, dataset, cfg=None, fov=120, outshape=(512, 512),
+    def __init__(self, dataset, cfg=None, fov=120, outshape=(512, 1024),
                  z_rotate=True, y_rotate=True, x_rotate=False,
-                 fix_aug=False):
+                 fix_aug=False, use_background=True):
         '''
         Convert classification dataset to omnidirectional version
         @dataset  dataset with same interface as torch.utils.data.Dataset
@@ -163,6 +166,7 @@ class OmniDataset(data.Dataset):
         self.x_rotate = x_rotate
         self.cfg = cfg
         self.name = dataset.name
+        self.use_background = use_background
 
         self.aug = None
         if fix_aug:
@@ -203,6 +207,15 @@ class OmniDataset(data.Dataset):
         else:
             rot_x = 0
 
+        bg_img = None
+        if self.use_background:
+            bg_idx = np.random.randint(1,23)
+            img_root = '/home/bo/research/realtime-action-detection/data/background/'
+            img_name = img_root + str(bg_idx) + '.jpg'
+            bg_img = cv2.imread(img_name)
+            bg_img = cv2.resize(bg_img, (self.outshape[1], self.outshape[0]))
+
+
         img, label, index = self.dataset[idx]
 
         if len(img.shape)==2:
@@ -211,7 +224,7 @@ class OmniDataset(data.Dataset):
         else:
             img_stack = []
             for ch in range(img.shape[0]):
-                img_ch = self._get_img(img, rot_x, rot_y, rot_z, ch=ch)
+                img_ch = self._get_img(img, rot_x, rot_y, rot_z, bg_img, ch=ch)
                 img_stack.append(img_ch.unsqueeze(0))
             img = torch.cat(img_stack, dim=0)
             assert(img.shape[0]==3)
@@ -234,11 +247,23 @@ class OmniDataset(data.Dataset):
                 all_v += [np.arctan2(ymin-0.5,np.sqrt(1./12))]
                 all_v += [np.arctan2(ymax-0.5,np.sqrt(1./12))]
 
-            umin,umax = umin/2/np.pi+0.5,umax/2/np.pi+0.5
-            vmin,vmax = min(all_v)/np.pi+0.5,max(all_v)/np.pi+0.5
+            # [-0.5,0.5] left->right;top->bottom
+            umin,umax = umin/2/np.pi,umax/2/np.pi
+            vmin,vmax = min(all_v)/np.pi,max(all_v)/np.pi
 
             h,w = vmax-vmin,umax-umin
-            cu,cv = (umax+umin)/2-rot_z/2/np.pi,(vmax+vmin)/2-rot_y/np.pi
+            cu,cv = (umax+umin)/2,(vmax+vmin)/2 
+            if not self.cfg['no_rotation']:
+                # rotate around origin before translation
+                cu2 = cu * np.cos(rot_x) + cv * np.sin(rot_x)
+                cv2 = -cu * np.sin(rot_x) + cv * np.cos(rot_x)
+                cu,cv = cu2,cv2
+
+            cu += 0.5
+            cv += 0.5
+
+            cu -= rot_z/2/np.pi
+            cv -= rot_y/np.pi
             cu = cu%1
             if cv > 1:
                 cv = 2 - cv
@@ -255,7 +280,7 @@ class OmniDataset(data.Dataset):
         return bboxes
 
 
-    def _get_img(self, img, rot_x, rot_y, rot_z, ch = None):
+    def _get_img(self, img, rot_x, rot_y, rot_z, bg_img, ch = None):
         # get image content from one channel
 
         if ch is not None:
@@ -264,8 +289,14 @@ class OmniDataset(data.Dataset):
         uv = genuv(*self.outshape) # out_h, out_w, (out_phi, out_theta)
         fov = self.fov * np.pi / 180
 
-        img_idx = uv2img_idx(uv, h, w, fov, fov, rot_x, rot_y, rot_z)
+        img_idx, invalid = uv2img_idx(uv, h, w, fov, fov, rot_x, rot_y, rot_z)
         x = map_coordinates(img, img_idx, order=1)
+
+        if bg_img is not None and ch is not None:
+            means = (104, 117, 123)
+            bg_img_ch = bg_img[:,:,2-ch]
+            x[invalid] = bg_img_ch[invalid] - means[ch]
+
 
         return torch.FloatTensor(x.copy())
 
@@ -347,6 +378,8 @@ if __name__ == '__main__':
         idx = int(idx)
         path = os.path.join(args.out_dir, '%d.png' % idx)
         x, label, _ = dataset[idx]
+        # for ch in range(0,3):
+        #     x[ch,:,:] -= args.means[ch]
 
         print(path, label)
         img = Image.fromarray(x.permute(1, 2, 0).numpy().astype(np.uint8))
