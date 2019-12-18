@@ -21,6 +21,8 @@ class KTNConv(nn.Module):
     def __init__(self,
                  kernel,
                  bias,
+                 stride,
+                 padding,
                  sphereH=320,
                  imgW=640,
                  fov=65.5,
@@ -35,6 +37,8 @@ class KTNConv(nn.Module):
         self.imgW = imgW
         self.fov = fov
         self.tied_weights = tied_weights
+        self.stride = stride
+        self.padding = padding
 
         pad_ind = torch.arange(sphereH,-1,-1).long()
         self.register_buffer("pad_ind", pad_ind)
@@ -68,7 +72,7 @@ class KTNConv(nn.Module):
 
         # manual create outputs
         oH = len(rows) * self.tied_weights
-        size = (batch_size, self.ktn.n_out, oH, iW)
+        size = (batch_size, self.ktn.n_out, oH//self.stride[0], iW//self.stride[1])
         outputs = create_variable(size)
         for i, row in enumerate(rows):
             # prepare kernel
@@ -94,15 +98,12 @@ class KTNConv(nn.Module):
                 x = torch.cat([X[:,:,top:,:], pad], dim=2)
             else:
                 x = X[:,:,top:bot,:]
+
             x = torch.cat([x[:,:,:,-pad_width:], x, x[:,:,:,:pad_width]], dim=3)
 
-            t = i * self.tied_weights
-            b = t + self.tied_weights
-            print(i,x.shape,kernel.shape,b-t)
-            tmp = F.conv2d(x, kernel, bias, dilation=(dilation_h, dilation_w))
-            print(tmp.shape)
-            outputs[:,:,t:b,:] = tmp
-            # outputs[:,:,t:b,:] = F.conv2d(x, kernel, bias, dilation=(dilation_h, dilation_w))
+            t = i * self.tied_weights//self.stride[0]
+            b = t + self.tied_weights//self.stride[0]
+            outputs[:,:,t:b,:] = F.conv2d(x, kernel, bias, stride=self.stride, dilation=(dilation_h, dilation_w))
         return outputs
 
     def update_group(self, group):

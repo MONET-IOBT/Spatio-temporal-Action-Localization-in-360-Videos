@@ -18,13 +18,14 @@ import torch.nn.init as init
 import argparse
 import torch.utils.data as data
 from data.omni_dataset import OmniUCF24, sph_detection_collate
-from data import v4,v5, AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
+from data import v3,v5, AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
 from utils.augmentations import SSDAugmentation
 # from layers.modules import MultiBoxLoss
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
 # from model.ssd import build_ssd
 from model.sph_ssd import build_vgg_ssd
 from model.fpnssd.net import FPNSSD512
+from model.vggssd.net import SSD512
 import numpy as np
 import time
 from utils.evaluation import evaluate_detections
@@ -79,7 +80,8 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 
 def main():
-    args.cfg = v5
+    args.cfg = v3
+    args.outshape = args.cfg['min_dim']
     args.train_sets = 'train'
     args.means = (104, 117, 123)
     num_classes = len(CLASSES) + 1
@@ -112,10 +114,10 @@ def main():
         assert(args.ssd_dim == 512)
         net = FPNSSD512(args.num_classes, args.cfg)
     else:
-        net = build_vgg_ssd(args.ssd_dim, args.num_classes, args.net_type)
-        net.extras.apply(weights_init)
-        net.loc.apply(weights_init)
-        net.conf.apply(weights_init)
+        net = SSD512(args.num_classes, args.cfg)
+        # net = build_vgg_ssd(args.num_classes, args.cfg)
+        net.loc_layers.apply(weights_init)
+        net.cls_layers.apply(weights_init)
         
 
     if args.input_type == 'fastOF':
@@ -139,10 +141,23 @@ def main():
     else:
         vgg_weights = torch.load(args.data_root +'ucf24/train_data/' + args.basenet)
         print('Loading base network...')
-        net.vgg.load_state_dict(vgg_weights)
+        model_dict = net.extractor.state_dict()
+        keymap = {'conv5_1.weight':'24.weight','conv5_1.bias':'24.bias',\
+                'conv5_2.weight':'26.weight','conv5_2.bias':'26.bias',\
+                'conv5_3.weight':'28.weight','conv5_3.bias':'28.bias',\
+                'conv6.weight':'31.weight','conv6.bias':'31.bias',\
+                'conv7.weight':'33.weight','conv7.bias':'33.bias'}
+        for key in model_dict.keys():
+            x = key.split('.')
+            if len(x)==4:
+                vggkey = '.'.join(x[2:])
+                model_dict[key] = vgg_weights[vggkey]
+            elif key in keymap:
+                model_dict[key] = vgg_weights[keymap[key]]
+        net.extractor.load_state_dict(model_dict)
 
-    if args.net_type == 'ktn':
-        net.transform()
+    if args.net_type != 'conv2d':
+        net.transform(args.net_type)
 
     if args.cuda:
         net = net.cuda()
@@ -155,10 +170,10 @@ def main():
     #Set different learning rate to bias layers and set their weight_decay to 0
     for name, param in parameter_dict.items():
         if name.find('bias') > -1:
-            print(name, 'layer parameters will be trained @ {}'.format(args.lr*2))
+            # print(name, 'layer parameters will be trained @ {}'.format(args.lr*2))
             params += [{'params': [param], 'lr': args.lr*2, 'weight_decay': 0}]
         else:
-            print(name, 'layer parameters will be trained @ {}'.format(args.lr))
+            # print(name, 'layer parameters will be trained @ {}'.format(args.lr))
             params += [{'params':[param], 'lr': args.lr, 'weight_decay':args.weight_decay}]
 
     optimizer = optim.SGD(params, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
@@ -185,9 +200,9 @@ def train(args, net, optimizer, criterion, scheduler):
 
     print('Loading Dataset...')
     train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means),
-                           AnnotationTransform(), cfg=args.cfg, input_type=args.input_type, outshape=(args.ssd_dim,args.ssd_dim))
+                           AnnotationTransform(), cfg=args.cfg, input_type=args.input_type, outshape=args.outshape)
     val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means),
-                           AnnotationTransform(), cfg=args.cfg, input_type=args.input_type, outshape=(args.ssd_dim,args.ssd_dim))
+                           AnnotationTransform(), cfg=args.cfg, input_type=args.input_type, outshape=args.outshape)
     
     print('Training SSD on', train_dataset.name)
 

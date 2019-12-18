@@ -35,29 +35,41 @@ class FPNSSD512(nn.Module):
             for i in range(len(self.in_channels)):
                 self.rot_layers += [nn.Conv2d(self.in_channels[i], self.num_anchors[i], kernel_size=3, padding=1)]
 
-    def transform(self):
+    def transform(self, net_type):
         def transform1(layer,s):
             for i,l in enumerate(layer):
-                stride = l.conv2.stride[0]
-                in_channels = l.conv2.in_channels
-                out_channels = l.conv2.out_channels
-                layer[i].conv2 = SphereConv2D(in_channels, out_channels, stride=stride)
-                # layer[i].conv2 = build_ktnconv(s, layer[i].conv2.weight, None)
+                if net_type == 'sphnet':
+                    stride = l.conv2.stride[0]
+                    in_channels = l.conv2.in_channels
+                    out_channels = l.conv2.out_channels
+                    new_layer = SphereConv2D(in_channels, out_channels, stride=stride)
+                else:
+                    bias = torch.zeros(l.conv2.out_channels)
+                    size = (s[0],2*s[0]) if i==0 else(s[1],2*s[1])
+                    new_layer = build_ktnconv(size, l.conv2.weight, bias, 
+                                            l.conv2.stride, l.conv2.padding)
+                layer[i].conv2 = new_layer
         transform1(self.extractor.layer1,[128,128])
-        transform1(self.extractor.layer2,[128,128])
-        transform1(self.extractor.layer3,[64,64])
-        transform1(self.extractor.layer4,[32,32])
+        transform1(self.extractor.layer2,[128,64])
+        transform1(self.extractor.layer3,[64,32])
+        transform1(self.extractor.layer4,[32,16])
 
-        def transform2(layer, s):
-            stride = layer.stride[0]
-            in_channels = layer.in_channels
-            out_channels = layer.out_channels
-            return SphereConv2D(in_channels, out_channels, stride=stride)
-            # return build_ktnconv(s, layer.weight, layer.bias)
-        self.extractor.conv6 = transform2(self.extractor.conv6, [16,16])
-        self.extractor.conv7 = transform2(self.extractor.conv7, [8,8])
-        self.extractor.conv8 = transform2(self.extractor.conv8, [4,4])
-        self.extractor.conv9 = transform2(self.extractor.conv9, [2,2])
+        def transform2(layer,s):
+            if net_type == 'sphnet':
+                stride = layer.stride[0]
+                in_channels = layer.in_channels
+                out_channels = layer.out_channels
+                new_layer = SphereConv2D(in_channels, out_channels, stride=stride)
+            else:
+                if s[0] <= 4:
+                    new_layer = layer
+                else:
+                    new_layer = build_ktnconv(s, layer.weight, layer.bias, layer.stride, layer.padding)
+            return new_layer
+        self.extractor.conv6 = transform2(self.extractor.conv6, [16,32])
+        self.extractor.conv7 = transform2(self.extractor.conv7, [8,16])
+        # self.extractor.conv8 = transform2(self.extractor.conv8, [4,8])
+        # self.extractor.conv9 = transform2(self.extractor.conv9, [2,4])
 
     def forward(self, x):
         loc_preds = []
@@ -91,18 +103,20 @@ class FPNSSD512(nn.Module):
 FOV = 120
 TIED_WEIGHT = 4
 
-def build_ktnconv(imgSize, kernel, bias):
+def build_ktnconv(imgSize, kernel, bias, stride, padding):
 
     fov = FOV
     ih,iw = imgSize
     tied_weights = 1 if ih%TIED_WEIGHT!=0 or iw%TIED_WEIGHT!=0 else TIED_WEIGHT
-    dilation = 2
+    dilation = 1
     arch = 'bilinear' 
     kernel_shape_type = "dilated"
 
     sys.stderr.write("Arch: {0}, tied_weights: {1}\n".format(arch, tied_weights))
     ktnconv = KTNConv(kernel,
                       bias,
+                      stride,
+                      padding,
                       sphereH=ih,
                       imgW=iw,
                       fov=fov,

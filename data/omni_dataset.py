@@ -149,9 +149,9 @@ def uv2img_idx(uv, h, w, u_fov, v_fov, rot_x=0, rot_y=0, rot_z=0):
 
 
 class OmniDataset(data.Dataset):
-    def __init__(self, dataset, cfg=None, fov=120, outshape=(512, 1024),
+    def __init__(self, dataset, cfg=None, fov=120, outshape=(512, 512),
                  z_rotate=True, y_rotate=True, x_rotate=False,
-                 fix_aug=False, use_background=True):
+                 fix_aug=False, use_background=True, num_bgs=22):
         '''
         Convert classification dataset to omnidirectional version
         @dataset  dataset with same interface as torch.utils.data.Dataset
@@ -168,13 +168,23 @@ class OmniDataset(data.Dataset):
         self.name = dataset.name
         self.use_background = use_background
 
+        # load backgorounds
+        self.bg_imgs = []
+        img_root = '/home/bo/research/realtime-action-detection/data/background/'
+        for bg_idx in range(1,23):
+            img_name = img_root + str(bg_idx) + '.jpg'
+            bg_img = cv2.imread(img_name)
+            bg_img = cv2.resize(bg_img, (self.outshape[1], self.outshape[0]))
+            self.bg_imgs += [bg_img]
+
+
         self.aug = None
         if fix_aug:
             self.aug = [
                 {
-                    'z_rotate': 0,#np.random.uniform(-np.pi, np.pi),
-                    'y_rotate': 0,#np.random.uniform(-np.pi/2, np.pi/2),
-                    'x_rotate': 0,#np.random.uniform(-np.pi, np.pi),
+                    'z_rotate': np.pi/4,#np.random.uniform(-np.pi, np.pi),
+                    'y_rotate': np.pi/8,#np.random.uniform(-np.pi/2, np.pi/2),
+                    'x_rotate': np.pi,#np.random.uniform(-np.pi, np.pi),
                 }
                 for _ in range(len(self.dataset))
             ]
@@ -209,12 +219,8 @@ class OmniDataset(data.Dataset):
 
         bg_img = None
         if self.use_background:
-            bg_idx = np.random.randint(1,23)
-            img_root = '/home/bo/research/realtime-action-detection/data/background/'
-            img_name = img_root + str(bg_idx) + '.jpg'
-            bg_img = cv2.imread(img_name)
-            bg_img = cv2.resize(bg_img, (self.outshape[1], self.outshape[0]))
-
+            bg_idx = np.random.randint(0,22)
+            bg_img = self.bg_imgs[bg_idx]
 
         img, label, index = self.dataset[idx]
 
@@ -253,11 +259,11 @@ class OmniDataset(data.Dataset):
 
             h,w = vmax-vmin,umax-umin
             cu,cv = (umax+umin)/2,(vmax+vmin)/2 
-            if not self.cfg['no_rotation']:
-                # rotate around origin before translation
-                cu2 = cu * np.cos(rot_x) + cv * np.sin(rot_x)
-                cv2 = -cu * np.sin(rot_x) + cv * np.cos(rot_x)
-                cu,cv = cu2,cv2
+            
+            # rotate around origin before translation
+            cu2 = cu * np.cos(rot_x) + cv * np.sin(rot_x)
+            cv2 = -cu * np.sin(rot_x) + cv * np.cos(rot_x)
+            cu,cv = cu2,cv2
 
             cu += 0.5
             cv += 0.5

@@ -14,7 +14,7 @@ from torch.autograd import Variable
 import sys
 sys.path.insert(0, '/home/bo/code/realtime-action-detection')
 from layers import *
-from data import sph_v2,v2,v3
+from data import sph_v2,v3
 from layers.functions.sph_prior_box import SphPriorBox
 from model.spherenet.sphere_cnn import SphereConv2D, SphereMaxPool2D
 from model.KernelTransformer.KTNLayer import KTNConv
@@ -83,16 +83,30 @@ class Sph_SSD(nn.Module):
 
         self.softmax = nn.Softmax(dim=1).cuda()
 
-    def transform(self):
+    def transform(self, net_type):
         for i,layer in enumerate(self.vgg):
             name = 'vgg.' + str(i)
             if name in LAYERS:
-                self.vgg[i] = build_ktnconv(name, layer.weight, layer.bias)
+                if net_type == 'ktn':
+                    new_layer = build_ktnconv(name, layer.weight, layer.bias)
+                elif net_type == 'sphnet':
+                    stride = layer.stride[0]
+                    in_channels = layer.in_channels
+                    out_channels = layer.out_channels
+                    new_layer = SphereConv2D(in_channels, out_channels, stride=stride)
+                self.vgg[i] = new_layer
 
         for i,layer in enumerate(self.extras):
             name = 'extra.' + str(i)
             if name in LAYERS:
-                self.extras[i] = build_ktnconv(name, layer.weight, layer.bias)
+                if net_type == 'ktn':
+                    new_layer = build_ktnconv(name, layer.weight, layer.bias)
+                elif net_type == 'sphnet':
+                    stride = layer.stride[0]
+                    in_channels = layer.in_channels
+                    out_channels = layer.out_channels
+                    new_layer = SphereConv2D(in_channels, out_channels, stride=stride)
+                self.extras[i] = new_layer
 
     def forward(self, x):
 
@@ -215,7 +229,7 @@ def sph_vgg(cfg, i, batch_norm=False):
             in_channels = v
     pool5 = SphereMaxPool2D(kernel_size=3, stride=1)
     conv6 = SphereConv2D(512, 1024, stride=1)
-    conv7 = nn.Conv2d(1024, 1024, kernel_size=1)
+    conv7 = SphereConv2D(1024, 1024, kernel_size=1)
     layers += [pool5, conv6,
                nn.ReLU(inplace=True), conv7, nn.ReLU(inplace=True)]
     return layers
@@ -275,22 +289,10 @@ mbox = {
 }
 
 
-def build_vgg_ssd(size=300, num_classes=25, net_type = 'conv2d'):
+def build_vgg_ssd(num_classes, cfg):
 
-    if size != 300 and size != 512:
-        print("Error: Sorry only SSD300 and SSD512 is supported currently!")
-        return
+    size = cfg['min_dim'][0]
 
-    if net_type == 'sphnet':
-        basenet = sph_vgg(base[str(size)], 3)
-    elif net_type == 'conv2d' or net_type == 'ktn':
-        basenet = vgg(base[str(size)], 3)
-    else:
-        print("Not implemented")
-        exit(0)
-
-    ver = sph_v2 if size == 300 else v3
-
-    return Sph_SSD(*multibox(basenet,
+    return Sph_SSD(*multibox(vgg(base[str(size)], 3),
                             add_extras(extras[str(size)], 1024),
-                            mbox[str(size)], num_classes, ver), num_classes, ver)
+                            mbox[str(size)], num_classes, cfg), num_classes, cfg)
