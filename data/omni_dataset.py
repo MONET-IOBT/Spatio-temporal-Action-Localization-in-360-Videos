@@ -149,8 +149,8 @@ def uv2img_idx(uv, h, w, u_fov, v_fov, rot_x=0, rot_y=0, rot_z=0):
 
 
 class OmniDataset(data.Dataset):
-    def __init__(self, dataset, cfg=None, fov=120, outshape=(512, 512),
-                 z_rotate=True, y_rotate=True, x_rotate=False,
+    def __init__(self, dataset, cfg=None, fov=120, outshape=(512, 2*512),
+                 z_rotate=True, y_rotate=True, x_rotate=True,
                  fix_aug=False, use_background=True, num_bgs=22):
         '''
         Convert classification dataset to omnidirectional version
@@ -215,7 +215,7 @@ class OmniDataset(data.Dataset):
             else:
                 rot_x = np.random.uniform(-np.pi, np.pi)
         else:
-            rot_x = 0
+            rot_x = np.pi
 
         bg_img = None
         if self.use_background:

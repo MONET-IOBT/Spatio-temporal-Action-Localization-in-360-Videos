@@ -45,7 +45,7 @@ parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=8, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--max_epoch', default=10, type=int, help='Number of training epochs')
@@ -59,8 +59,8 @@ parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight dec
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
 parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom Server')
-parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -82,6 +82,7 @@ torch.set_default_tensor_type('torch.FloatTensor')
 def main():
     args.cfg = v3
     args.outshape = args.cfg['min_dim']
+    args.inplane_rot = False
     args.train_sets = 'train'
     args.means = (104, 117, 123)
     num_classes = len(CLASSES) + 1
@@ -92,8 +93,8 @@ def main():
     args.print_step = 10
 
     ## Define the experiment Name will used to same directory and ENV for visdom
-    args.exp_name = 'CONV-SSD-{}-{}-bs-{}-{}-lr-{:05d}'.format(args.dataset,
-                args.input_type, args.batch_size, args.basenet[:-14], int(args.lr*100000))
+    args.exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}-xrot-{}'.format(args.net_type, args.dataset,
+                args.input_type, args.batch_size, args.basenet[:-14], int(args.lr*100000), args.inplane_rot)
 
     args.save_root += args.dataset+'/'
     args.save_root = args.save_root+'cache/'+args.exp_name+'/'
@@ -199,10 +200,10 @@ def train(args, net, optimizer, criterion, scheduler):
     rot_losses = AverageMeter()
 
     print('Loading Dataset...')
-    train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means),
-                           AnnotationTransform(), cfg=args.cfg, input_type=args.input_type, outshape=args.outshape)
-    val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means),
-                           AnnotationTransform(), cfg=args.cfg, input_type=args.input_type, outshape=args.outshape)
+    train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means), AnnotationTransform(), 
+                            cfg=args.cfg, x_rotate=args.inplane_rot, input_type=args.input_type, outshape=args.outshape)
+    val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
+                            cfg=args.cfg, x_rotate=args.inplane_rot, input_type=args.input_type, outshape=args.outshape)
     
     print('Training SSD on', train_dataset.name)
 
