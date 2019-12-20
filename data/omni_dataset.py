@@ -159,6 +159,8 @@ class OmniDataset(data.Dataset):
         '''
         assert(cfg is not None)
         self.dataset = dataset
+        self.ids = dataset.ids
+        self.video_list = dataset.video_list
         self.fov = fov
         self.outshape = outshape
         self.z_rotate = z_rotate
@@ -170,7 +172,7 @@ class OmniDataset(data.Dataset):
 
         # load backgorounds
         self.bg_imgs = []
-        img_root = '/home/monet/research/realtime-action-detection/data/background/'
+        img_root = '/home/bo/research/realtime-action-detection/data/background/'
         for bg_idx in range(1,23):
             img_name = img_root + str(bg_idx) + '.jpg'
             bg_img = cv2.imread(img_name)
