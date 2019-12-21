@@ -11,8 +11,11 @@ from torchvision import datasets
 # Misc
 from functools import lru_cache
 
+import os
+
 import sys
 sys.path.insert(0, '/home/bo/research/realtime-action-detection')
+from utils.augmentations import SSDAugmentation
 from data import v5
 
 def genuv(h, w):
@@ -150,8 +153,8 @@ def uv2img_idx(uv, h, w, u_fov, v_fov, rot_x=0, rot_y=0, rot_z=0):
 
 class OmniDataset(data.Dataset):
     def __init__(self, dataset, cfg=None, fov=120, outshape=(512, 2*512),
-                 z_rotate=True, y_rotate=True, x_rotate=True,
-                 fix_aug=False, use_background=True, num_bgs=22):
+                 z_rotate=True, y_rotate=True, x_rotate=False,
+                 fix_aug=False, use_background=True, num_bgs=22, save_final_annot=True):
         '''
         Convert classification dataset to omnidirectional version
         @dataset  dataset with same interface as torch.utils.data.Dataset
@@ -169,6 +172,22 @@ class OmniDataset(data.Dataset):
         self.cfg = cfg
         self.name = dataset.name
         self.use_background = use_background
+        self.video_list = dataset.video_list
+        self.ids = dataset.ids
+        self.root = dataset.root
+        self.final_dataset_location = self.root + 'cache/final_dataset.npy'
+        self.final_annot_location = self.root + 'cache/final_annot.dat'
+
+        self.aug = None
+        if fix_aug:
+            self.aug = [
+                {
+                    'z_rotate': np.random.uniform(-np.pi, np.pi),
+                    'y_rotate': np.random.uniform(-np.pi/2, np.pi/2),
+                    'x_rotate': np.random.uniform(-np.pi, np.pi),
+                }
+                for _ in range(len(self.dataset))
+            ]
 
         # load backgorounds
         self.bg_imgs = []
@@ -179,49 +198,81 @@ class OmniDataset(data.Dataset):
             bg_img = cv2.resize(bg_img, (self.outshape[1], self.outshape[0]))
             self.bg_imgs += [bg_img]
 
+        # map video to background
+        self.vid2bgidx = {}
+        for vid in range(len(self.video_list)):
+            self.vid2bgidx[vid] = np.random.randint(0,22)
 
-        self.aug = None
-        if fix_aug:
-            self.aug = [
-                {
-                    'z_rotate': np.pi/4,#np.random.uniform(-np.pi, np.pi),
-                    'y_rotate': np.pi/8,#np.random.uniform(-np.pi/2, np.pi/2),
-                    'x_rotate': np.pi,#np.random.uniform(-np.pi, np.pi),
-                }
-                for _ in range(len(self.dataset))
-            ]
+        # map video to rotation
+        self.vid2rot = {}
+        for vid in range(len(self.video_list)):
+            if self.y_rotate:
+                if self.aug is not None:
+                    rot_y = self.aug[idx]['y_rotate']
+                else:
+                    rot_y = np.random.uniform(-np.pi/2, np.pi/2)
+            else:
+                rot_y = 0
+
+            if self.z_rotate:
+                if self.aug is not None:
+                    rot_z = self.aug[idx]['z_rotate']
+                else:
+                    rot_z = np.random.uniform(-np.pi, np.pi)
+            else:
+                rot_z = 0
+
+            if self.x_rotate:
+                if self.aug is not None:
+                    rot_x = self.aug[idx]['x_rotate']
+                else:
+                    rot_x = np.random.uniform(-np.pi, np.pi)
+            else:
+                rot_x = np.pi
+
+            self.vid2rot[vid] = (rot_x,rot_y,rot_z)
+
+        print('transforming dataset')
+        self.sph_dataset = []
+        if os.path.exists(self.final_dataset_location):
+            np_load_old=np.load
+            np.load=lambda *a,**k:np_load_old(*a,allow_pickle=True,**k)
+            self.sph_dataset = np.load(self.final_dataset_location)
+        else:
+            import collections
+            self.final_annot = collections.defaultdict(list)
+            for idx in range(len(self.dataset)):
+                if idx > 3:break
+                if idx%100 == 0:print('%6d/%6d'%(idx,len(self.dataset)))
+                img, label, index = self._transform_item(idx)
+                self.sph_dataset.append((img, label, index))
+                # save annot in the mean time
+                annot_info = self.ids[idx]
+                video_id = annot_info[0]
+                videoname = self.video_list[video_id]
+                self.final_annot[videoname].append(label)
+            np.save(self.final_dataset_location,self.sph_dataset)
+            np.save(self.final_annot_location,self.final_annot)
+            # use this to create final annotation
+
+        print('transform finishes')
 
     def __len__(self):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        if self.y_rotate:
-            if self.aug is not None:
-                rot_y = self.aug[idx]['y_rotate']
-            else:
-                rot_y = np.random.uniform(-np.pi/2, np.pi/2)
-        else:
-            rot_y = 0
+        img, label, index = self.sph_dataset[idx]
+        return img, label, index
 
-        if self.z_rotate:
-            if self.aug is not None:
-                rot_z = self.aug[idx]['z_rotate']
-            else:
-                rot_z = np.random.uniform(-np.pi, np.pi)
-        else:
-            rot_z = 0
+    def _transform_item(self, idx):
+        annot_info = self.ids[idx]
+        video_id = annot_info[0]
 
-        if self.x_rotate:
-            if self.aug is not None:
-                rot_x = self.aug[idx]['x_rotate']
-            else:
-                rot_x = np.random.uniform(-np.pi, np.pi)
-        else:
-            rot_x = np.pi
+        rot_x,rot_y,rot_z = self.vid2rot[video_id]
 
         bg_img = None
         if self.use_background:
-            bg_idx = np.random.randint(0,22)
+            bg_idx = self.vid2bgidx[video_id]
             bg_img = self.bg_imgs[bg_idx]
 
         img, label, index = self.dataset[idx]
@@ -237,6 +288,7 @@ class OmniDataset(data.Dataset):
             img = torch.cat(img_stack, dim=0)
             assert(img.shape[0]==3)
             label = self._get_label(label, rot_x, rot_y, rot_z)
+
         return img, label, index
 
     def _get_label(self, bboxes, rot_x, rot_y, rot_z):
@@ -305,7 +357,6 @@ class OmniDataset(data.Dataset):
             bg_img_ch = bg_img[:,:,2-ch]
             x[invalid] = bg_img_ch[invalid] - means[ch]
 
-
         return torch.FloatTensor(x.copy())
 
 
@@ -335,7 +386,6 @@ def sph_detection_collate(batch):
         imgs.append(sample[0])
         targets.append(torch.FloatTensor(sample[1]))
     return torch.stack(imgs, 0), targets
-
 
 if __name__ == '__main__':
 
@@ -377,8 +427,8 @@ if __name__ == '__main__':
     args.means = (104, 117, 123)
 
     if args.dataset == 'OmniUCF24':
-        dataset = OmniUCF24(args.data_root, args.train_sets, BaseTransform(args.ssd_dim, args.means),
-                           AnnotationTransform(), cfg=v5, input_type=args.input_type, fix_aug=True)
+        dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means),
+                           AnnotationTransform(), cfg=v5, input_type=args.input_type)
     else:
         exit(0)
 

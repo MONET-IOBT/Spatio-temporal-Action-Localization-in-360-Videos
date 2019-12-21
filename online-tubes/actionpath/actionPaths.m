@@ -124,11 +124,11 @@ loc = 0;
 for f = 1 : numframes
   filename = [detectionDir,detectionList{f}];
   load(filename); % loads loc and scores variable
-  loc = [loc(:,1)*320, loc(:,2)*240, loc(:,3)*320, loc(:,4)*240];
-  loc(loc(:,1)<0,1) = 0;
-  loc(loc(:,2)<0,2) = 0;
-  loc(loc(:,3)>319,3) = 319;
-  loc(loc(:,4)>239,4) = 239;
+  loc = [loc(:,1)*1024, loc(:,2)*512, loc(:,3)*1024, loc(:,4)*512];
+%   loc(loc(:,1)<0,1) = 0;
+%   loc(loc(:,2)<0,2) = 0;
+%   loc(loc(:,3)>1023,3) = 319;
+%   loc(loc(:,4)>511,4) = 239;
   loc = loc + 1;
   frames(f).boxes = loc;
   frames(f).scores = [scores(:,2:end),scores(:,1)];

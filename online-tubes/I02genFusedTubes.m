@@ -1,8 +1,8 @@
 
 function I02genFusedTubes()
 
-data_root = '/mnt/mars-fast/datasets';
-save_root = '/mnt/mars-gamma/datasets';
+data_root = '/home/bo/research/dataset';
+save_root = '/home/bo/research/dataset';
 
 addpath(genpath('actionpath/'));
 addpath(genpath('gentube/'));

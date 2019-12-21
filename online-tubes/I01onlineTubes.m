@@ -9,9 +9,9 @@
 
 function I01onlineTubes()
 
-data_root = '/mnt/sun-gamma/datasets';
-save_root = '/mnt/sun-gamma/datasets';
-iteration_nums = [70000,120000,50000,90000]; % you can also evaluate on multiple iterations
+data_root = '/home/bo/research/dataset';
+save_root = '/home/bo/research/dataset';
+iteration_nums = [30000]; % you can also evaluate on multiple iterations
 
 % add subfolder to matlab paths
 addpath(genpath('gentube/'));
