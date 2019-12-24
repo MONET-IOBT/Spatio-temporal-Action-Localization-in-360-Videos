@@ -222,11 +222,11 @@ N2 = size(v2.boxes,1);
 score = zeros(1,N2);
 
 % try
-bounds1 = [v1.boxes(end,1:2) v1.boxes(end,3:4)-v1.boxes(end,1:2)+1];
+bounds1 = [v1.boxes(end,1:2) v1.boxes(end,3:4)-v1.boxes(end,1:2)];
 % catch
 %     fprintf('catch here')
 % end
-bounds2 = [v2.boxes(:,1:2) v2.boxes(:,3:4)-v2.boxes(:,1:2)+1];
+bounds2 = [v2.boxes(:,1:2) v2.boxes(:,3:4)-v2.boxes(:,1:2)];
 iou = inters_union(bounds1,bounds2);
 
 for i = 1 : N2
