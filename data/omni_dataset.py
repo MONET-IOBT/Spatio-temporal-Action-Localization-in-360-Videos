@@ -258,8 +258,10 @@ class OmniDataset(data.Dataset):
                     for old,new in zip(old_label,label):
                         old = (int(old[0]),int(old[1]),int(old[2]-old[0]),int(old[3]-old[1]))
                         if sum(old) == 0:continue
-                        new = [int(new[0]*1024)+1,int(new[1]*512)+1,int((new[2]-new[0])*1024),int((new[3]-new[1])*512)]
-                        self.annot_map[videoname][old] = new
+                        self.annot_map[videoname][old] = [int(new[0]*1024)+1,\
+                                                            int(new[1]*512)+1,\
+                                                            int((new[2]-new[0])*1024),\
+                                                            int((new[3]-new[1])*512)]
             np.save(self.final_dataset_location,self.sph_dataset)
 
             # transform the annotation
@@ -274,7 +276,7 @@ class OmniDataset(data.Dataset):
                             key = (old_box[0],old_box[1],old_box[2],old_box[3])
                             assert(key in self.annot_map[filename])
                             old_boxes[i] = self.annot_map[filename][key]
-                sio.savemat(self.final_annot_location,{'annot':old_annots})
+                sio.savemat(self.final_annot_location,{'annot':old_annots['annot'][0]})
         print('transform finishes')
 
     def __len__(self):
