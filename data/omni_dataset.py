@@ -192,7 +192,7 @@ class OmniDataset(data.Dataset):
 
         # load backgorounds
         self.bg_imgs = []
-        img_root = '/home/bo/research/realtime-action-detection/data/background/'
+        img_root = '/home/monet/research/realtime-action-detection/data/background/'
         for bg_idx in range(1,23):
             img_name = img_root + str(bg_idx) + '.jpg'
             bg_img = cv2.imread(img_name)
@@ -235,48 +235,52 @@ class OmniDataset(data.Dataset):
 
         print('transforming dataset')
         self.sph_dataset = []
-        if False and os.path.exists(self.final_dataset_location):
-            np_load_old=np.load
-            np.load=lambda *a,**k:np_load_old(*a,allow_pickle=True,**k)
-            self.sph_dataset = np.load(self.final_dataset_location)
-        else:
-            # when training, generate the dataset, disregard annots
-            # when testing, generate the dataset, use annots
-            if self.dataset.image_set == 'test':
-                assert(os.path.exists(self.original_annot_location))
-                import collections
-                self.annot_map = collections.defaultdict(dict)
-            # transform the images
-            for idx in range(len(self.dataset)):
-                img, label, index = self._transform_item(idx)
-                self.sph_dataset.append((img, label, index))
-                if self.dataset.image_set == 'test':
-                    annot_info = self.ids[idx]
-                    video_id = annot_info[0]
-                    videoname = self.video_list[video_id]
-                    old_label = self.ids[idx][3]
-                    for old,new in zip(old_label,label):
-                        old = (int(old[0]),int(old[1]),int(old[2]-old[0]),int(old[3]-old[1]))
-                        if sum(old) == 0:continue
-                        self.annot_map[videoname][old] = [int(new[0]*1024)+1,\
-                                                            int(new[1]*512)+1,\
-                                                            int((new[2]-new[0])*1024),\
-                                                            int((new[3]-new[1])*512)]
-            np.save(self.final_dataset_location,self.sph_dataset)
+        # if False and os.path.exists(self.final_dataset_location):
+        #     np_load_old=np.load
+        #     np.load=lambda *a,**k:np_load_old(*a,allow_pickle=True,**k)
+        #     self.sph_dataset = np.load(self.final_dataset_location)
+        # else:
 
-            # transform the annotation
+        # when training, generate the dataset, disregard annots
+        # when testing, generate the dataset, use annots
+        if self.dataset.image_set == 'test':
+            assert(os.path.exists(self.original_annot_location))
+            import collections
+            self.annot_map = collections.defaultdict(dict)
+        # transform the images
+        for idx in range(len(self.dataset)):
+            img, label, index = self._transform_item(idx)
+            self.sph_dataset.append((img, label, index))
             if self.dataset.image_set == 'test':
-                import scipy.io as sio
-                old_annots = sio.loadmat(self.original_annot_location)
-                for annot in old_annots['annot'][0]:
-                    filename = annot[1][0]
-                    if filename in self.annot_map:
-                        old_boxes = annot[2][0][0][3]
-                        for i,old_box in enumerate(old_boxes):
-                            key = (old_box[0],old_box[1],old_box[2],old_box[3])
-                            assert(key in self.annot_map[filename])
-                            old_boxes[i] = self.annot_map[filename][key]
-                sio.savemat(self.final_annot_location,{'annot':old_annots['annot'][0]})
+                annot_info = self.ids[idx]
+                video_id = annot_info[0]
+                videoname = self.video_list[video_id]
+                old_label = self.ids[idx][3]
+                for old,new in zip(old_label,label):
+                    old = (int(old[0]),int(old[1]),int(old[2]-old[0]),int(old[3]-old[1]))
+                    if sum(old) == 0:continue
+                    self.annot_map[videoname][old] = [int(new[0]*1024)+1,\
+                                                        int(new[1]*512)+1,\
+                                                        int((new[2]-new[0])*1024),\
+                                                        int((new[3]-new[1])*512)]
+            if idx%500 == 0:
+                print('Loading %6d/%6d'%(idx,len(dataset)))
+
+        np.save(self.final_dataset_location,self.sph_dataset)
+
+        # transform the annotation
+        if self.dataset.image_set == 'test':
+            import scipy.io as sio
+            old_annots = sio.loadmat(self.original_annot_location)
+            for annot in old_annots['annot'][0]:
+                filename = annot[1][0]
+                if filename in self.annot_map:
+                    old_boxes = annot[2][0][0][3]
+                    for i,old_box in enumerate(old_boxes):
+                        key = (old_box[0],old_box[1],old_box[2],old_box[3])
+                        assert(key in self.annot_map[filename])
+                        old_boxes[i] = self.annot_map[filename][key]
+            sio.savemat(self.final_annot_location,{'annot':old_annots['annot'][0]})
         print('transform finishes')
 
     def __len__(self):

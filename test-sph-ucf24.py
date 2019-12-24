@@ -36,14 +36,14 @@ parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Ja
 parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
-parser.add_argument('--eval_iter', default='30000,', type=str, help='Number of training iterations')
+parser.add_argument('--eval_iter', default='220000,', type=str, help='Number of training iterations')
 parser.add_argument('--man_seed', default=123, type=int, help='manualseed for reproduction')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
-parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -211,7 +211,7 @@ def main():
         # Load dataset
         dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, means), AnnotationTransform(), 
                             cfg=args.cfg, x_rotate=args.inplane_rot, input_type=args.input_type, 
-                            outshape=args.outshape, full_test=False)
+                            outshape=args.outshape, full_test=True)
         # evaluation
         torch.cuda.synchronize()
         tt0 = time.perf_counter()
