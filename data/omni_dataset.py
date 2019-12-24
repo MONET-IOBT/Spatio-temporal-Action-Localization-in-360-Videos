@@ -176,7 +176,8 @@ class OmniDataset(data.Dataset):
         self.ids = dataset.ids
         self.root = dataset.root
         self.final_dataset_location = self.root + 'cache/final_dataset.npy'
-        self.final_annot_location = self.root + 'cache/final_annot.dat'
+        self.original_annot_location = self.root +'splitfiles/finalAnnots.mat'
+        self.final_annot_location = self.root + 'splitfiles/correctedAnnots.mat'
 
         self.aug = None
         if fix_aug:
@@ -234,27 +235,46 @@ class OmniDataset(data.Dataset):
 
         print('transforming dataset')
         self.sph_dataset = []
-        if os.path.exists(self.final_dataset_location):
+        if False and os.path.exists(self.final_dataset_location):
             np_load_old=np.load
             np.load=lambda *a,**k:np_load_old(*a,allow_pickle=True,**k)
             self.sph_dataset = np.load(self.final_dataset_location)
         else:
-            import collections
-            self.final_annot = collections.defaultdict(list)
+            # when training, generate the dataset, disregard annots
+            # when testing, generate the dataset, use annots
+            if self.dataset.image_set == 'test':
+                assert(os.path.exists(self.original_annot_location))
+                import collections
+                self.annot_map = collections.defaultdict(dict)
+            # transform the images
             for idx in range(len(self.dataset)):
-                if idx > 3:break
-                if idx%100 == 0:print('%6d/%6d'%(idx,len(self.dataset)))
                 img, label, index = self._transform_item(idx)
                 self.sph_dataset.append((img, label, index))
-                # save annot in the mean time
-                annot_info = self.ids[idx]
-                video_id = annot_info[0]
-                videoname = self.video_list[video_id]
-                self.final_annot[videoname].append(label)
+                if self.dataset.image_set == 'test':
+                    annot_info = self.ids[idx]
+                    video_id = annot_info[0]
+                    videoname = self.video_list[video_id]
+                    old_label = self.ids[idx][3]
+                    for old,new in zip(old_label,label):
+                        old = (int(old[0]),int(old[1]),int(old[2]-old[0]),int(old[3]-old[1]))
+                        if sum(old) == 0:continue
+                        new = [int(new[0]*1024)+1,int(new[1]*512)+1,int((new[2]-new[0])*1024),int((new[3]-new[1])*512)]
+                        self.annot_map[videoname][old] = new
             np.save(self.final_dataset_location,self.sph_dataset)
-            np.save(self.final_annot_location,self.final_annot)
-            # use this to create final annotation
 
+            # transform the annotation
+            if self.dataset.image_set == 'test':
+                import scipy.io as sio
+                old_annots = sio.loadmat(self.original_annot_location)
+                for annot in old_annots['annot'][0]:
+                    filename = annot[1][0]
+                    if filename in self.annot_map:
+                        old_boxes = annot[2][0][0][3]
+                        for i,old_box in enumerate(old_boxes):
+                            key = (old_box[0],old_box[1],old_box[2],old_box[3])
+                            assert(key in self.annot_map[filename])
+                            old_boxes[i] = self.annot_map[filename][key]
+                sio.savemat(self.final_annot_location,{'annot':old_annots})
         print('transform finishes')
 
     def __len__(self):
@@ -425,10 +445,11 @@ if __name__ == '__main__':
     args.data_root = '/home/bo/research/dataset/ucf24/'
     args.train_sets = 'train'
     args.means = (104, 117, 123)
+    np.random.seed(111)
 
     if args.dataset == 'OmniUCF24':
-        dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means),
-                           AnnotationTransform(), cfg=v5, input_type=args.input_type)
+        dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means),
+                           AnnotationTransform(), cfg=v5, input_type=args.input_type, full_test=True)
     else:
         exit(0)
 
