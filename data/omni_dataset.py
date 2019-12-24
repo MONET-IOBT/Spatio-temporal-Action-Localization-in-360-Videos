@@ -234,7 +234,7 @@ class OmniDataset(data.Dataset):
             self.vid2rot[vid] = (rot_x,rot_y,rot_z)
 
         print('transforming dataset')
-        # self.sph_dataset = []
+        self.sph_dataset = []
         # if False and os.path.exists(self.final_dataset_location):
         #     np_load_old=np.load
         #     np.load=lambda *a,**k:np_load_old(*a,allow_pickle=True,**k)
@@ -250,8 +250,7 @@ class OmniDataset(data.Dataset):
         # transform the images
         for idx in range(len(self.dataset)):
             img, label, index = self._transform_item(idx)
-            self.dataset[idx] = (img, label, index)
-            # self.sph_dataset.append((img, label, index))
+            self.sph_dataset.append((img, label, index))
             if self.dataset.image_set == 'test':
                 annot_info = self.ids[idx]
                 video_id = annot_info[0]
@@ -266,7 +265,7 @@ class OmniDataset(data.Dataset):
                                                         int((new[3]-new[1])*512)]
             if idx%500 == 0:
                 print('Loading %6d/%6d'%(idx,len(dataset)))
-        self.sph_dataset = self.dataset
+
         np.save(self.final_dataset_location,self.sph_dataset)
 
         # transform the annotation
