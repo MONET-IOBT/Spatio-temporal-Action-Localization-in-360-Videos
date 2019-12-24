@@ -175,9 +175,9 @@ class OmniDataset(data.Dataset):
         self.video_list = dataset.video_list
         self.ids = dataset.ids
         self.root = dataset.root
-        self.final_dataset_location = self.root + 'cache/final_dataset.npy'
+        self.final_dataset_location = self.root + 'cache/final_dataset_' + self.dataset.image_set + '.npy'
         self.original_annot_location = self.root +'splitfiles/finalAnnots.mat'
-        self.final_annot_location = self.root + 'splitfiles/correctedAnnots.mat'
+        self.final_annot_location = self.root + 'splitfiles/correctedAnnots_' + self.dataset.image_set + '.mat'
 
         self.aug = None
         if fix_aug:
