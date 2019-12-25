@@ -233,43 +233,43 @@ class OmniDataset(data.Dataset):
 
             self.vid2rot[vid] = (rot_x,rot_y,rot_z)
 
-        # if self.dataset.image_set == 'test' and not os.path.exists(self.final_annot_location):
-        #     print('transforming annotation')
-        #     assert(os.path.exists(self.original_annot_location))
-        #     import collections
-        #     self.annot_map = collections.defaultdict(dict)
+        if self.dataset.image_set == 'test' and not os.path.exists(self.final_annot_location):
+            print('transforming annotation')
+            assert(os.path.exists(self.original_annot_location))
+            import collections
+            self.annot_map = collections.defaultdict(dict)
 
-        #     # transform the images
-        #     for idx in range(len(self.dataset)):
-        #         annot_info = self.ids[idx]
-        #         video_id = annot_info[0]
-        #         videoname = self.video_list[video_id]
+            # transform the images
+            for idx in range(len(self.dataset)):
+                annot_info = self.ids[idx]
+                video_id = annot_info[0]
+                videoname = self.video_list[video_id]
 
-        #         label = self._get_label(self.dataset[idx][1], *self.vid2rot[video_id])
-        #         old_label = self.ids[idx][3]
-        #         for old,new in zip(old_label,label):
-        #             old = (int(old[0]),int(old[1]),int(old[2]-old[0]),int(old[3]-old[1]))
-        #             if sum(old) == 0:continue
-        #             self.annot_map[videoname][old] = [int(new[0]*1024)+1,\
-        #                                                 int(new[1]*512)+1,\
-        #                                                 int((new[2]-new[0])*1024),\
-        #                                                 int((new[3]-new[1])*512)]
-        #         if idx%1000 == 0:
-        #             print('Transforming %6d/%6d'%(idx,len(dataset)))
+                label = self._get_label(self.dataset[idx][1], *self.vid2rot[video_id])
+                old_label = self.ids[idx][3]
+                for old,new in zip(old_label,label):
+                    old = (int(old[0]),int(old[1]),int(old[2]-old[0]),int(old[3]-old[1]))
+                    if sum(old) == 0:continue
+                    self.annot_map[videoname][old] = [int(new[0]*1024)+1,\
+                                                        int(new[1]*512)+1,\
+                                                        int((new[2]-new[0])*1024),\
+                                                        int((new[3]-new[1])*512)]
+                if idx%1000 == 0:
+                    print('Transforming %6d/%6d'%(idx,len(dataset)))
 
-        #     # transform the annotation
-        #     import scipy.io as sio
-        #     old_annots = sio.loadmat(self.original_annot_location)
-        #     for annot in old_annots['annot'][0]:
-        #         filename = annot[1][0]
-        #         if filename in self.annot_map:
-        #             old_boxes = annot[2][0][0][3]
-        #             for i,old_box in enumerate(old_boxes):
-        #                 key = (old_box[0],old_box[1],old_box[2],old_box[3])
-        #                 assert(key in self.annot_map[filename])
-        #                 old_boxes[i] = self.annot_map[filename][key]
-        #     sio.savemat(self.final_annot_location,{'annot':old_annots['annot'][0]})
-        #     print('transform finishes')
+            # transform the annotation
+            import scipy.io as sio
+            old_annots = sio.loadmat(self.original_annot_location)
+            for annot in old_annots['annot'][0]:
+                filename = annot[1][0]
+                if filename in self.annot_map:
+                    old_boxes = annot[2][0][0][3]
+                    for i,old_box in enumerate(old_boxes):
+                        key = (old_box[0],old_box[1],old_box[2],old_box[3])
+                        assert(key in self.annot_map[filename])
+                        old_boxes[i] = self.annot_map[filename][key]
+            sio.savemat(self.final_annot_location,{'annot':old_annots['annot'][0]})
+            print('transform finishes')
 
     def __len__(self):
         return len(self.dataset)
