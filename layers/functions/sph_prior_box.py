@@ -32,9 +32,6 @@ class SphPriorBox(object):
         self.aspect_ratios = cfg['aspect_ratios']
         self.clip = cfg['clip']
         self.version = cfg['name']
-        assert('num_rotations' in cfg)
-        self.num_rotations = cfg['num_rotations']
-        self.no_rotation = cfg['no_rotation']
         for v in self.variance:
             if v <= 0:
                 raise ValueError('Variances must be greater than 0')
@@ -42,42 +39,37 @@ class SphPriorBox(object):
     def forward(self):
         mean = []
         # TODO merge these
-        if self.version == 'sph_v2' or self.version == 'v4' or self.version == 'v5' or self.version == 'v3':
-            for k, f in enumerate(self.feature_maps):
-                h,w = f
-                for i in range(h):
-                    for j in range(w):
-                        boxes = []
-                        f_kx = self.image_size[1] * 1. / self.steps[k][1]
-                        f_ky = self.image_size[0] * 1. / self.steps[k][0]
-                        # unit center x,y
-                        cx = (j + 0.5) / f_kx
-                        cy = (i + 0.5) / f_ky
+        for k, f in enumerate(self.feature_maps):
+            h,w = f
+            for i in range(h):
+                for j in range(w):
+                    boxes = []
+                    f_kx = self.image_size[1] * 1. / self.steps[k][1]
+                    f_ky = self.image_size[0] * 1. / self.steps[k][0]
+                    # unit center x,y
+                    cx = (j + 0.5) / f_kx
+                    cy = (i + 0.5) / f_ky
 
-                        # aspect_ratio: 1
-                        # rel size: min_size
-                        s_kx = self.min_sizes[k] * 1. /self.image_size[1]
-                        s_ky = self.min_sizes[k] * 1. /self.image_size[0]
-                        boxes.append([cx, cy, s_kx, s_ky])
+                    # aspect_ratio: 1
+                    # rel size: min_size
+                    s_kx = self.min_sizes[k] * 1. /self.image_size[1]
+                    s_ky = self.min_sizes[k] * 1. /self.image_size[0]
+                    boxes.append([cx, cy, s_kx, s_ky])
 
-                        # aspect_ratio: 1
-                        # rel size: sqrt(s_k * s_(k+1))
-                        s_kx_prime = sqrt(s_kx * (self.max_sizes[k] * 1. /self.image_size[1]))
-                        s_ky_prime = sqrt(s_ky * (self.max_sizes[k] * 1. /self.image_size[0]))
-                        boxes.append([cx, cy, s_kx_prime, s_ky_prime])
+                    # aspect_ratio: 1
+                    # rel size: sqrt(s_k * s_(k+1))
+                    s_kx_prime = sqrt(s_kx * (self.max_sizes[k] * 1. /self.image_size[1]))
+                    s_ky_prime = sqrt(s_ky * (self.max_sizes[k] * 1. /self.image_size[0]))
+                    boxes.append([cx, cy, s_kx_prime, s_ky_prime])
 
-                        # rest of aspect ratios
-                        for ar in self.aspect_ratios[k]:
-                            boxes.append([cx, cy, s_kx*sqrt(ar), s_ky/sqrt(ar)])
-                            boxes.append([cx, cy, s_kx/sqrt(ar), s_ky*sqrt(ar)])
+                    # rest of aspect ratios
+                    for ar in self.aspect_ratios[k]:
+                        boxes.append([cx, cy, s_kx*sqrt(ar), s_ky/sqrt(ar)])
+                        boxes.append([cx, cy, s_kx/sqrt(ar), s_ky*sqrt(ar)])
 
-                        for box in boxes:
-                            mean += box
-                        
-
-        else:
-            print('Not implemented')
-            exit(-1)
+                    for box in boxes:
+                        mean += box
+                    
         # back to torch land
         output = torch.Tensor(mean).view(-1, 4)
         if self.clip:

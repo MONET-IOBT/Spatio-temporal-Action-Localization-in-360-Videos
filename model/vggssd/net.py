@@ -238,11 +238,7 @@ class SSD512(nn.Module):
         for i in range(len(self.in_channels)):
         	self.loc_layers += [nn.Conv2d(self.in_channels[i], self.num_anchors[i]*4, kernel_size=3, padding=1)]
         	self.cls_layers += [nn.Conv2d(self.in_channels[i], self.num_anchors[i]*self.num_classes, kernel_size=3, padding=1)]
-        if not cfg['no_rotation']:
-            self.rot_layers = nn.ModuleList()
-            for i in range(len(self.in_channels)):
-                self.rot_layers += [nn.Conv2d(self.in_channels[i], self.num_anchors[i], kernel_size=3, padding=1)]
-
+        
     def transform(self, net_type):
         def transform_conv2d(layer):
             if net_type == 'sphnet':
@@ -261,7 +257,21 @@ class SSD512(nn.Module):
                 self.extractor.features.layers[i] = SphereMaxPool2D(kernel_size=2, 
                                                                     stride=2, 
                                                                     ceil_mode=True)
-
+    def load_weights(self,vgg_weights):
+        model_dict = self.extractor.state_dict()
+        keymap = {'conv5_1.weight':'24.weight','conv5_1.bias':'24.bias',\
+                'conv5_2.weight':'26.weight','conv5_2.bias':'26.bias',\
+                'conv5_3.weight':'28.weight','conv5_3.bias':'28.bias',\
+                'conv6.weight':'31.weight','conv6.bias':'31.bias',\
+                'conv7.weight':'33.weight','conv7.bias':'33.bias'}
+        for key in model_dict.keys():
+            x = key.split('.')
+            if len(x)==4:
+                vggkey = '.'.join(x[2:])
+                model_dict[key] = vgg_weights[vggkey]
+            elif key in keymap:
+                model_dict[key] = vgg_weights[keymap[key]]
+        self.extractor.load_state_dict(model_dict)
 
     def forward(self, x):
         loc_preds = []
@@ -279,18 +289,7 @@ class SSD512(nn.Module):
         loc_preds = torch.cat(loc_preds, 1)
         cls_preds = torch.cat(cls_preds, 1)
 
-        if not self.cfg['no_rotation']:
-            rot_preds = []
-            for i, x in enumerate(xs):
-                rot_pred = self.rot_layers[i](x)
-                rot_pred = rot_pred.permute(0,2,3,1).contiguous()
-                rot_preds.append(rot_pred.view(rot_pred.size(0),-1))
-            rot_preds = torch.cat(rot_preds, 1)
-        
-        if self.cfg['no_rotation']:
-            return loc_preds, cls_preds, self.priors
-        else:
-            return loc_preds, cls_preds, self.priors, rot_preds
+        return loc_preds, cls_preds, self.priors
 
 FOV = 120
 TIED_WEIGHT = 4

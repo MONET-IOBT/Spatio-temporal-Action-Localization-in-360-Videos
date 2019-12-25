@@ -14,8 +14,9 @@ from torch.autograd import Variable
 import sys
 sys.path.insert(0, '/home/bo/code/realtime-action-detection')
 from layers import *
-from data import sph_v2,v3
+from data import v2,v3
 from layers.functions.sph_prior_box import SphPriorBox
+from layers.modules.l2norm import L2Norm
 from model.spherenet.sphere_cnn import SphereConv2D, SphereMaxPool2D
 from model.KernelTransformer.KTNLayer import KTNConv
 import os
@@ -26,7 +27,7 @@ INPUT_WIDTH = 600
 FOV = 120
 TIED_WEIGHT = 5
 
-featmap = sph_v2['feature_maps']
+featmap = v2['feature_maps']
 imgSize = {'vgg.0':(int(INPUT_WIDTH/2),INPUT_WIDTH), 'vgg.2':(int(INPUT_WIDTH/2),INPUT_WIDTH),\
         'vgg.5':(int(INPUT_WIDTH/4),int(INPUT_WIDTH/2)), 'vgg.7':(int(INPUT_WIDTH/4),int(INPUT_WIDTH/2)),\
         'vgg.10':(int(INPUT_WIDTH/8),int(INPUT_WIDTH/4)), 'vgg.12':(int(INPUT_WIDTH/8),int(INPUT_WIDTH/4)), 'vgg.14':(int(INPUT_WIDTH/8),int(INPUT_WIDTH/4)),\
@@ -107,6 +108,9 @@ class Sph_SSD(nn.Module):
                     out_channels = layer.out_channels
                     new_layer = SphereConv2D(in_channels, out_channels, stride=stride)
                 self.extras[i] = new_layer
+
+    def load_weights(self,vgg_weights):
+        self.vgg.load_state_dict(vgg_weights)
 
     def forward(self, x):
 
@@ -255,19 +259,18 @@ def add_extras(cfg, i, batch_norm=False):
     return layers
 
 
-def multibox(vgg, extra_layers, cfg, num_classes, ver):
+def multibox(vgg, extra_layers, cfg, num_classes):
     loc_layers = []
     conf_layers = []
     vgg_source = [24, -2]
-    box_len = 4 if ver['no_rotation'] else 5
     for k, v in enumerate(vgg_source):
         loc_layers += [nn.Conv2d(vgg[v].out_channels,
-                                 cfg[k] * box_len, kernel_size=3, padding=1)]
+                                 cfg[k] * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(vgg[v].out_channels,
                         cfg[k] * num_classes, kernel_size=3, padding=1)]
     for k, v in enumerate(extra_layers[1::2], 2):
         loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
-                                 * box_len, kernel_size=3, padding=1)]
+                                 * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                   * num_classes, kernel_size=3, padding=1)]
     return vgg, extra_layers, (loc_layers, conf_layers)
@@ -295,4 +298,4 @@ def build_vgg_ssd(num_classes, cfg):
 
     return Sph_SSD(*multibox(vgg(base[str(size)], 3),
                             add_extras(extras[str(size)], 1024),
-                            mbox[str(size)], num_classes, cfg), num_classes, cfg)
+                            mbox[str(size)], num_classes), num_classes, cfg)

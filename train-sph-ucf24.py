@@ -18,7 +18,7 @@ import torch.nn.init as init
 import argparse
 import torch.utils.data as data
 from data.omni_dataset import OmniUCF24, sph_detection_collate
-from data import v3,v4,v5, AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
+from data import v1,v2,v3,v4,v5,v6, AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
 from utils.augmentations import SSDAugmentation
 # from layers.modules import MultiBoxLoss
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
@@ -39,8 +39,8 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='v2', help='conv11_2(v2) or pool6(v1) as last layer')
-parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
+# parser.add_argument('--version', default='v2', help='conv11_2(v2) or pool6(v1) as last layer')
+# parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
@@ -52,7 +52,7 @@ parser.add_argument('--max_epoch', default=6, type=int, help='Number of training
 parser.add_argument('--man_seed', default=123, type=int, help='manualseed for reproduction')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
-parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
+parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--stepvalues', default='30000,60000,100000', type=str, help='iter numbers where learing rate to be dropped')
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
@@ -81,8 +81,8 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 def main():
     args.cfg = v4
+    args.basenet = args.cfg['base'] + '_reducedfc.pth'
     args.outshape = args.cfg['min_dim']
-    args.inplane_rot = False
     args.train_sets = 'train'
     args.means = (104, 117, 123)
     num_classes = len(CLASSES) + 1
@@ -93,8 +93,8 @@ def main():
     args.print_step = 10
 
     ## Define the experiment Name will used to same directory and ENV for visdom
-    args.exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}-xrot-{}'.format(args.net_type, args.dataset,
-                args.input_type, args.batch_size, args.basenet[:-14], int(args.lr*100000), args.inplane_rot)
+    args.exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}-{}'.format(args.net_type, args.dataset,
+                args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000), args.cfg['name'])
 
     args.save_root += args.dataset+'/'
     args.save_root = args.save_root+'cache/'+args.exp_name+'/'
@@ -111,14 +111,18 @@ def main():
             xavier(m.weight.data)
             m.bias.data.zero_()
 
-    if args.basenet[:-14] == 'fpn':
+    if args.cfg['base'] == 'fpn':
         assert(args.ssd_dim == 512)
         net = FPNSSD512(args.num_classes, args.cfg)
     else:
-        net = SSD512(args.num_classes, args.cfg)
-        # net = build_vgg_ssd(args.num_classes, args.cfg)
-        net.loc_layers.apply(weights_init)
-        net.cls_layers.apply(weights_init)
+        if args.cfg['min_dim'][0] == 512:
+            net = SSD512(args.num_classes, args.cfg)
+            net.loc_layers.apply(weights_init)
+            net.cls_layers.apply(weights_init)
+        else:
+            net = build_vgg_ssd(args.num_classes, args.cfg)
+            net.loc.apply(weights_init)
+            net.conf.apply(weights_init)
         
 
     if args.input_type == 'fastOF':
@@ -126,36 +130,10 @@ def main():
         pretrained_weights = args.data_root + 'ucf24/train_data/brox_wieghts.pth'
         print('Loading base network...')
         net.fpn.load_state_dict(torch.load(pretrained_weights))
-    elif args.basenet[:-14] == 'fpn':
-        weights = torch.load(args.data_root +'ucf24/train_data/' + args.basenet)
-        # delete some keys due to change of number of classes 21->25
-        useless_keys = []
-        for key in weights:
-            if key.find('cls_layers') == 0 or (not args.cfg['no_rotation'] and key.find('loc_layers')==0):
-                useless_keys.append(key)
-        for key in useless_keys:
-            del weights[key]
-        model_dict = net.state_dict()
-        model_dict.update(weights)
-        print('Loading base network...')
-        net.load_state_dict(model_dict)
     else:
         vgg_weights = torch.load(args.data_root +'ucf24/train_data/' + args.basenet)
         print('Loading base network...')
-        model_dict = net.extractor.state_dict()
-        keymap = {'conv5_1.weight':'24.weight','conv5_1.bias':'24.bias',\
-                'conv5_2.weight':'26.weight','conv5_2.bias':'26.bias',\
-                'conv5_3.weight':'28.weight','conv5_3.bias':'28.bias',\
-                'conv6.weight':'31.weight','conv6.bias':'31.bias',\
-                'conv7.weight':'33.weight','conv7.bias':'33.bias'}
-        for key in model_dict.keys():
-            x = key.split('.')
-            if len(x)==4:
-                vggkey = '.'.join(x[2:])
-                model_dict[key] = vgg_weights[vggkey]
-            elif key in keymap:
-                model_dict[key] = vgg_weights[keymap[key]]
-        net.extractor.load_state_dict(model_dict)
+        net.load_weights(vgg_weights)
 
     if args.net_type != 'conv2d':
         net.transform(args.net_type)
@@ -197,13 +175,12 @@ def train(args, net, optimizer, criterion, scheduler):
     losses = AverageMeter()
     loc_losses = AverageMeter()
     cls_losses = AverageMeter()
-    rot_losses = AverageMeter()
 
     print('Loading Dataset...')
     train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means), AnnotationTransform(), 
-                            cfg=args.cfg, x_rotate=args.inplane_rot, input_type=args.input_type, outshape=args.outshape)
+                            cfg=args.cfg, input_type=args.input_type, outshape=args.outshape)
     val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
-                            cfg=args.cfg, x_rotate=args.inplane_rot, input_type=args.input_type, outshape=args.outshape)
+                            cfg=args.cfg, input_type=args.input_type, outshape=args.outshape)
     
     print('Training SSD on', train_dataset.name)
 
@@ -233,19 +210,17 @@ def train(args, net, optimizer, criterion, scheduler):
             # backprop
             optimizer.zero_grad()
 
-            loss_l, loss_c, loss_r = criterion(out, targets)
-            loss = loss_l + loss_c + loss_r
+            loss_l, loss_c = criterion(out, targets)
+            loss = loss_l + loss_c
             loss.backward()
             optimizer.step()
             scheduler.step()
             loc_loss = loss_l.item()
             conf_loss = loss_c.item()
-            rot_loss = 0 if loss_r == 0 else loss_r.item() 
             # print('Loss data type ',type(loc_loss))
             loc_losses.update(loc_loss)
             cls_losses.update(conf_loss)
-            rot_losses.update(rot_loss)
-            losses.update((loc_loss + conf_loss + rot_loss)/2.0)
+            losses.update((loc_loss + conf_loss)/2.0)
 
 
             if iteration % args.print_step == 0 and iteration>0:
@@ -253,10 +228,10 @@ def train(args, net, optimizer, criterion, scheduler):
                 t1 = time.perf_counter()
                 batch_time.update(t1 - t0)
 
-                print_line = 'E{:02d} Iter {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) rot-loss {:.3f}({:.3f}) ' \
+                print_line = 'E{:02d} Iter {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) ' \
                              'avg-loss {:.3f}({:.3f}) Timer {:0.3f}({:0.3f})'.format(epoch_count,
                               iteration, args.max_iter, loc_losses.val, loc_losses.avg, cls_losses.val,
-                              cls_losses.avg, rot_losses.val, rot_losses.avg, losses.val, losses.avg, batch_time.val, batch_time.avg)
+                              cls_losses.avg, losses.val, losses.avg, batch_time.val, batch_time.avg)
 
                 torch.cuda.synchronize()
                 t0 = time.perf_counter()

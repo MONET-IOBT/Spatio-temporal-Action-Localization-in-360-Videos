@@ -229,7 +229,7 @@ class OmniDataset(data.Dataset):
                 else:
                     rot_x = np.random.uniform(-np.pi, np.pi)
             else:
-                rot_x = np.pi
+                rot_x = 0
 
             self.vid2rot[vid] = (rot_x,rot_y,rot_z)
 
@@ -345,10 +345,7 @@ class OmniDataset(data.Dataset):
             elif cv < 0:
                 cv = -cv
                 cu = cu-0.5 if cu>=0.5 else cu+0.5
-            if self.cfg['no_rotation']:
-                new_bboxes.append([cu-w/2,cv-h/2,cu+w/2,cv+h/2,ac_type])
-            else:
-                new_bboxes.append([cu-w/2,cv-h/2,cu+w/2,cv+h/2,rot_x/np.pi/2+0.5,ac_type])
+            new_bboxes.append([cu-w/2,cv-h/2,cu+w/2,cv+h/2,ac_type])
         bboxes = new_bboxes
 
         return bboxes

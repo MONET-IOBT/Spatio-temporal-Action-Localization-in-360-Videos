@@ -40,7 +40,6 @@ class SphMultiBoxLoss(nn.Module):
         self.negpos_ratio = neg_pos
         self.neg_overlap = neg_overlap
         self.variance = cfg['variance']
-        self.no_rotation = cfg['no_rotation']
 
     def forward(self, predictions, targets):
         """Multibox Loss
@@ -54,10 +53,7 @@ class SphMultiBoxLoss(nn.Module):
             ground_truth (tensor): Ground truth boxes and labels for a batch,
                 shape: [batch_size,num_objs,6] (last idx is the label).
         """
-        if len(predictions) == 3:
-            loc_data, conf_data, priors = predictions
-        else:
-            loc_data, conf_data, priors, rot_data = predictions
+        loc_data, conf_data, priors = predictions
         num = loc_data.size(0)
         priors = priors[:loc_data.size(1), :]
         num_priors = (priors.size(0))
@@ -95,12 +91,6 @@ class SphMultiBoxLoss(nn.Module):
         loc_p = loc_data[pos_idx].view(-1, 4)
         loc_t = loc_t[pos_idx].view(-1, 4)
         loss_l = F.smooth_l1_loss(loc_p[:,:4], loc_t[:,:4], reduction='sum')
-        if len(predictions) == 3:
-            loss_ro = 0
-        else:
-            rot_p = rot_data[pos].view(-1, 1)
-            rot_t = rot_t[pos].view(-1, 1)
-            loss_ro = F.smooth_l1_loss(rot_p, rot_t, reduction='sum')
         with torch.no_grad():
             # Compute max conf across batch for hard negative mining
             batch_conf = conf_data.view(-1, self.num_classes)
@@ -129,5 +119,4 @@ class SphMultiBoxLoss(nn.Module):
         N = float(num_pos.data.sum())
         loss_l /= N
         loss_c /= N
-        loss_ro /= N
-        return loss_l, loss_c, loss_ro
+        return loss_l, loss_c
