@@ -233,7 +233,7 @@ class OmniDataset(data.Dataset):
 
             self.vid2rot[vid] = (rot_x,rot_y,rot_z)
 
-        if self.dataset.image_set == 'test' and not os.path.exists(self.final_annot_location):
+        if self.dataset.image_set == 'test':
             print('transforming annotation')
             assert(os.path.exists(self.original_annot_location))
             import collections
