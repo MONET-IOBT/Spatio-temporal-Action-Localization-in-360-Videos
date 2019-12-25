@@ -50,7 +50,7 @@ v4 = {
 
     'clip' : True,
 
-    'name' : 'v3',
+    'name' : 'v4',
 
     'no_rotation' : True,
 }
