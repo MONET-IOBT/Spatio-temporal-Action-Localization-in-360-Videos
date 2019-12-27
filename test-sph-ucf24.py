@@ -185,7 +185,7 @@ def main():
 
     means = (104, 117, 123)  # only support voc now
 
-    args.exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}-{}'.format(args.net_type, args.dataset,
+    exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}-{}'.format(args.net_type, args.dataset,
                 args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000), args.cfg['name'])
 
     args.save_root += args.dataset+'/'
