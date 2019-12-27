@@ -12,7 +12,7 @@ import torch
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
 from data.omni_dataset import OmniUCF24
-from data import AnnotationTransform, UCF24Detection, BaseTransform, CLASSES, detection_collate, v3
+from data import AnnotationTransform, UCF24Detection, BaseTransform, CLASSES, detection_collate, v6
 from model.fpnssd.net import FPNSSD512
 import torch.utils.data as data
 from layers.sph_box_utils import decode, nms
@@ -36,7 +36,7 @@ parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Ja
 parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=1, type=int, help='Number of workers used in dataloading')
-parser.add_argument('--eval_iter', default='220000,', type=str, help='Number of training iterations')
+parser.add_argument('--eval_iter', default='30000,', type=str, help='Number of training iterations')
 parser.add_argument('--man_seed', default=123, type=int, help='manualseed for reproduction')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
@@ -52,8 +52,7 @@ parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or kt
 
 
 args = parser.parse_args()
-args.cfg = v3
-args.inplane_rot = False
+args.cfg = v6
 args.outshape = args.cfg['min_dim']
 np.random.seed(args.man_seed)
 torch.manual_seed(args.man_seed)
@@ -186,10 +185,8 @@ def main():
 
     means = (104, 117, 123)  # only support voc now
 
-    # exp_name = 'CONV-SSD-{}-{}-bs-{}-{}-lr-{:05d}'.format(args.dataset, args.input_type,
-    #                         args.batch_size, args.basenet[:-14], int(args.lr * 100000))
-    exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}-xrot-{}'.format(args.net_type, args.dataset,
-                args.input_type, args.batch_size, args.basenet[:-14], int(args.lr*100000), args.inplane_rot)
+    args.exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}-{}'.format(args.net_type, args.dataset,
+                args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000), args.cfg['name'])
 
     args.save_root += args.dataset+'/'
     args.data_root += args.dataset+'/'
@@ -211,7 +208,7 @@ def main():
         # Load dataset
         dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, means), AnnotationTransform(), 
                             cfg=args.cfg, x_rotate=args.inplane_rot, input_type=args.input_type, 
-                            outshape=args.outshape, full_test=True)
+                            outshape=args.outshape, full_test=False)
         # evaluation
         torch.cuda.synchronize()
         tt0 = time.perf_counter()
