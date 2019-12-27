@@ -207,7 +207,7 @@ def main():
         print('Finished loading model %d !' % iteration)
         # Load dataset
         dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, means), AnnotationTransform(), 
-                            cfg=args.cfg, x_rotate=args.inplane_rot, input_type=args.input_type, 
+                            cfg=args.cfg, input_type=args.input_type, 
                             outshape=args.outshape, full_test=False)
         # evaluation
         torch.cuda.synchronize()
