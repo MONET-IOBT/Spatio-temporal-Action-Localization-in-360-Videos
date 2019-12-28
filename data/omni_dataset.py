@@ -307,6 +307,7 @@ class OmniDataset(data.Dataset):
 
     def _get_label(self, bboxes, rot_x, rot_y, rot_z):
 
+        new_bboxes = []
         for xmin,ymin,xmax,ymax,ac_type in bboxes:
             umin = np.arctan((xmin-0.5)*2*1.7321)
             umax = np.arctan((xmax-0.5)*2*1.7321)
