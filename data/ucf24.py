@@ -141,7 +141,8 @@ def make_lists(rootpath, imgtype, split=1, fulltest=False):
                     testlist.append([vid, frame_num+1, np.asarray(labels), np.asarray(all_boxes)])
                     test_action_counts[actidx] += 1 #len(labels)
             elif fulltest and not istrain: # if test video with no ground truth and fulltest is trues
-                testlist.append([vid, frame_num+1, np.asarray([9999]), np.zeros((1,4))])
+                pass
+                # testlist.append([vid, frame_num+1, np.asarray([9999]), np.zeros((1,4))])
 
     # for actidx, act_count in enumerate(train_action_counts): # just to see the distribution of train and test sets
     #     print('train {:05d} test {:05d} action {:02d} {:s}'.format(act_count, test_action_counts[actidx] , int(actidx), CLASSES[actidx]))

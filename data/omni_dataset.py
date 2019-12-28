@@ -16,7 +16,7 @@ import os
 import sys
 sys.path.insert(0, '/home/bo/research/realtime-action-detection')
 from utils.augmentations import SSDAugmentation
-from data import v5
+from data import v6
 
 def genuv(h, w):
     u, v = np.meshgrid(np.arange(w), np.arange(h))
@@ -307,7 +307,6 @@ class OmniDataset(data.Dataset):
 
     def _get_label(self, bboxes, rot_x, rot_y, rot_z):
 
-        new_bboxes = []
         for xmin,ymin,xmax,ymax,ac_type in bboxes:
             umin = np.arctan((xmin-0.5)*2*1.7321)
             umax = np.arctan((xmax-0.5)*2*1.7321)
@@ -440,7 +439,7 @@ if __name__ == '__main__':
 
     if args.dataset == 'OmniUCF24':
         dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means),
-                           AnnotationTransform(), cfg=v5, input_type=args.input_type, full_test=True)
+                           AnnotationTransform(), cfg=v6, input_type=args.input_type, full_test=True)
     else:
         exit(0)
 
