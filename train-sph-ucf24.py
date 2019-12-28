@@ -80,7 +80,7 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 
 def main():
-    args.cfg = v6
+    args.cfg = v3
     args.basenet = args.cfg['base'] + '_reducedfc.pth'
     args.outshape = args.cfg['min_dim']
     args.train_sets = 'train'
