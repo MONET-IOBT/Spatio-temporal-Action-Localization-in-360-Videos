@@ -36,7 +36,7 @@ parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Ja
 parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=1, type=int, help='Number of workers used in dataloading')
-parser.add_argument('--eval_iter', default='30000,', type=str, help='Number of training iterations')
+parser.add_argument('--eval_iter', default='80000,', type=str, help='Number of training iterations')
 parser.add_argument('--man_seed', default=123, type=int, help='manualseed for reproduction')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
@@ -208,7 +208,7 @@ def main():
         # Load dataset
         dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, means), AnnotationTransform(), 
                             cfg=args.cfg, input_type=args.input_type, 
-                            outshape=args.outshape, full_test=False)
+                            outshape=args.outshape, full_test=True)
         # evaluation
         torch.cuda.synchronize()
         tt0 = time.perf_counter()
