@@ -45,7 +45,6 @@ parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to tra
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
-parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
 parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
@@ -107,7 +106,6 @@ def main():
                 args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000), args.cfg['name'])
 
     args.save_root += args.dataset+'/'
-    args.data_root += args.dataset+'/'
     args.listid = '01' ## would be usefull in JHMDB-21
     print('Exp name', exp_name, args.listid)
     for iteration in [int(itr) for itr in args.eval_iter.split(',') if len(itr)>0]:
