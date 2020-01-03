@@ -12,8 +12,10 @@ import torch
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
 from data.omni_dataset import OmniUCF24
-from data import AnnotationTransform, UCF24Detection, BaseTransform, CLASSES, detection_collate, v6
+from data import AnnotationTransform, UCF24Detection, BaseTransform, CLASSES, detection_collate, v1,v2,v3,v4,v5,v6
 from model.fpnssd.net import FPNSSD512
+from model.sph_ssd import build_vgg_ssd
+from model.vggssd.net import SSD512
 import torch.utils.data as data
 from layers.sph_box_utils import decode, nms
 from utils.evaluation import evaluate_detections
@@ -27,7 +29,7 @@ def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='v3', help='conv11_2(v2) or pool6(v1) as last layer')
+parser.add_argument('--version', default='v1', help='The version of config')
 parser.add_argument('--basenet', default='fpn_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
@@ -42,8 +44,8 @@ parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to tra
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
-parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -52,7 +54,8 @@ parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or kt
 
 
 args = parser.parse_args()
-args.cfg = v6
+all_versions = [v1,v2,v3,v4,v5,v6]
+args.cfg = all_versions[int(args.version[-1])-1]
 args.outshape = args.cfg['min_dim']
 np.random.seed(args.man_seed)
 torch.manual_seed(args.man_seed)
@@ -198,7 +201,13 @@ def main():
         trained_model_path = args.save_root + 'cache/' + exp_name + '/ssd300_ucf24_' + repr(iteration) + '.pth'
         log_file.write(trained_model_path+'\n')
         num_classes = len(CLASSES) + 1  #7 +1 background
-        net = FPNSSD512(num_classes, args.cfg)
+        if args.cfg['base'] == 'fpn':
+            net = FPNSSD512(num_classes, args.cfg)
+        else:
+            if args.cfg['min_dim'][0] == 512:
+                net = SSD512(num_classes, args.cfg)
+            else:
+                net = build_vgg_ssd(num_classes, args.cfg)
         net.load_state_dict(torch.load(trained_model_path))
         net.eval()
         if args.cuda:
@@ -208,7 +217,7 @@ def main():
         # Load dataset
         dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, means), AnnotationTransform(), 
                             cfg=args.cfg, input_type=args.input_type, 
-                            outshape=args.outshape, full_test=True)
+                            outshape=args.outshape, full_test=False)
         # evaluation
         torch.cuda.synchronize()
         tt0 = time.perf_counter()
