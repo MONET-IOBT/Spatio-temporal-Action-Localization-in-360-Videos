@@ -80,6 +80,7 @@ class VGG16Extractor300(nn.Module):
     def forward(self, x):
         hs = []
         h = self.features(x)
+        print(self.features)
         hs.append(self.norm4(h))  # conv4_3
 
         h = F.max_pool2d(h, kernel_size=2, stride=2, ceil_mode=True)
@@ -318,8 +319,8 @@ def build_ktnconv(imgSize, kernel, bias, stride, padding):
     return ktnconv
 
 def test():
-    net = SSD512(25)
-    loc_preds, cls_preds = net(Variable(torch.randn(1,3,512,512)))
+    net = SSD300(25)
+    loc_preds, cls_preds = net(Variable(torch.randn(1,3,300,300)))
     print(loc_preds.size(), cls_preds.size())
 
 if __name__ == '__main__':

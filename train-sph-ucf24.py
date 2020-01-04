@@ -18,7 +18,7 @@ import torch.nn.init as init
 import argparse
 import torch.utils.data as data
 from data.omni_dataset import OmniUCF24, sph_detection_collate
-from data import v1,v2,v3,v4,v5,v6, AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
+from data import v1,v2,v3,v4,v5,v6,v7,v8, AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
 from utils.augmentations import SSDAugmentation
 # from layers.modules import MultiBoxLoss
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
@@ -26,6 +26,7 @@ from layers.modules.sph_multibox_loss import SphMultiBoxLoss
 from model.sph_ssd import build_vgg_ssd
 from model.fpnssd.net import FPNSSD512
 from model.vggssd.net import SSD512
+from model.mobile_ssd_v1.net import MobileSSD512
 import numpy as np
 import time
 from utils.evaluation import evaluate_detections
@@ -39,7 +40,7 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-# parser.add_argument('--version', default='v2', help='conv11_2(v2) or pool6(v1) as last layer')
+parser.add_argument('--version', default='v7', help='The version of config')
 # parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
@@ -55,7 +56,7 @@ parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train 
 parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--stepvalues', default='30000,60000,100000', type=str, help='iter numbers where learing rate to be dropped')
-parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
+parser.add_argument('--weight_decay', default=1e-3, type=float, help='Weight decay for SGD')
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
 parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom Server')
@@ -80,7 +81,8 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 
 def main():
-    args.cfg = v5
+    all_versions = [v1,v2,v3,v4,v5,v6,v7,v8]
+    args.cfg = all_versions[int(args.version[-1])-1]
     args.basenet = args.cfg['base'] + '_reducedfc.pth'
     args.outshape = args.cfg['min_dim']
     args.train_sets = 'train'
@@ -114,7 +116,7 @@ def main():
     if args.cfg['base'] == 'fpn':
         assert(args.ssd_dim == 512)
         net = FPNSSD512(args.num_classes, args.cfg)
-    else:
+    elif args.cfg['base'] == 'vgg16':
         if args.cfg['min_dim'][0] == 512:
             net = SSD512(args.num_classes, args.cfg)
             net.loc_layers.apply(weights_init)
@@ -123,19 +125,22 @@ def main():
             net = build_vgg_ssd(args.num_classes, args.cfg)
             net.loc.apply(weights_init)
             net.conf.apply(weights_init)
-        
+    elif args.cfg['base'] == 'mobile_v1':
+        net = MobileSSD512(args.num_classes, args.cfg)
+    else:
+        return 
 
     if args.input_type == 'fastOF':
         print('Download pretrained brox flow trained model weights and place them at:::=> ',args.data_root + 'ucf24/train_data/brox_wieghts.pth')
         pretrained_weights = args.data_root + 'ucf24/train_data/brox_wieghts.pth'
         print('Loading base network...')
         net.fpn.load_state_dict(torch.load(pretrained_weights))
-    else:
+    elif args.cfg['base'] == 'vgg16' or args.cfg['base'] == 'fpn':
         vgg_weights = torch.load(args.data_root +'ucf24/train_data/' + args.basenet)
         print('Loading base network...')
         net.load_weights(vgg_weights)
 
-    if args.net_type != 'conv2d':
+    if args.net_type != 'conv2d' and (args.cfg['base'] == 'vgg16' or args.cfg['base'] == 'fpn'):
         net.transform(args.net_type)
 
     if args.cuda:
