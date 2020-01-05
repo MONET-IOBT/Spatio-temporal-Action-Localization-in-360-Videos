@@ -61,7 +61,7 @@ class InvertedResidual(nn.Module):
         assert stride in [1, 2]
 
         hidden_dim = round(inp * expand_ratio)
-        self.use_res_connect = self.stride == 1 and inp == oup
+        self.use_res_connect = self.stride == 1 and inp == oup and padding == 1
 
         if expand_ratio == 1:
             if use_batch_norm:
@@ -166,7 +166,7 @@ class MobileNetExtractorLite300V2(nn.Module):
         self.extras = nn.ModuleList([
             InvertedResidual(512, 256, stride=2, padding=1, expand_ratio=0.25),
             InvertedResidual(256, 256, stride=2, padding=1, expand_ratio=0.25),
-            InvertedResidual(256, 256, stride=2, padding=0, expand_ratio=0.5)])
+            InvertedResidual(256, 256, stride=1, padding=0, expand_ratio=0.5)])
 
     def forward(self, x):
         hs = []

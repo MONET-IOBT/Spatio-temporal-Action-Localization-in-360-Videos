@@ -18,7 +18,8 @@ import torch.nn.init as init
 import argparse
 import torch.utils.data as data
 from data.omni_dataset import OmniUCF24, sph_detection_collate
-from data import v1,v2,v3,v4,v5,v6,v7,v8,v9,v10, AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
+from data import AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
+from data import v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12
 from utils.augmentations import SSDAugmentation
 # from layers.modules import MultiBoxLoss
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
@@ -28,6 +29,7 @@ from model.fpnssd.net import FPNSSD512
 from model.vggssd.net import SSD512
 from model.mobile_ssd_v1.net import MobileSSD512
 from model.mobile_ssd_v2.net import MobileSSDLite300V2
+from model.mobile_fpnssd.net import MobileFPNSSD512
 import numpy as np
 import time
 from utils.evaluation import evaluate_detections
@@ -47,7 +49,7 @@ parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=8, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--max_epoch', default=6, type=int, help='Number of training epochs')
@@ -82,7 +84,7 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 
 def main():
-    all_versions = [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10]
+    all_versions = [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12]
     args.cfg = all_versions[int(args.version)-1]
     args.basenet = args.cfg['base'] + '_reducedfc.pth'
     args.outshape = args.cfg['min_dim']
@@ -130,6 +132,8 @@ def main():
         net = MobileSSD512(args.num_classes, args.cfg)
     elif args.cfg['base'] == 'mobile_v2_300_lite':
         net = MobileSSDLite300V2(args.num_classes, args.cfg)
+    elif args.cfg['base'] == 'fpn_mobile_512':
+        net = MobileFPNSSD512(args.num_classes, args.cfg)
     else:
         return 
 
@@ -256,7 +260,7 @@ def train(args, net, optimizer, criterion, scheduler):
                     print('Reset accumulators of ', args.exp_name,' at', itr_count*args.print_step)
                     itr_count = 0
 
-            if (iteration % args.eval_step == 0 or iteration == 5000) and iteration>0:
+            if (iteration % args.eval_step == 0) and iteration>0:
                 torch.cuda.synchronize()
                 tvs = time.perf_counter()
                 print('Saving state, iter:', iteration)

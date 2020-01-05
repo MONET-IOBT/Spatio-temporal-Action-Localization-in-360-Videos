@@ -301,7 +301,7 @@ class MobileSSDLite512(nn.Module):
 
 def test():
     net = MobileSSD512(25,v3)
-    loc_preds, cls_preds, priors = net(Variable(torch.randn(16,3,512,512)))
+    loc_preds, cls_preds, priors = net(Variable(torch.randn(16,3,512,1024)))
     print(loc_preds.size(), cls_preds.size(), priors.size())
 
 if __name__ == '__main__':
