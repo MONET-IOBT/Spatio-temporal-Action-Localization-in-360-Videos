@@ -19,7 +19,7 @@ import argparse
 import torch.utils.data as data
 from data.omni_dataset import OmniUCF24, sph_detection_collate
 from data import AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
-from data import v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12
+from data import v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13
 from utils.augmentations import SSDAugmentation
 # from layers.modules import MultiBoxLoss
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
@@ -30,6 +30,12 @@ from model.vggssd.net import SSD512
 from model.mobile_ssd_v1.net import MobileSSD512
 from model.mobile_ssd_v2.net import MobileSSDLite300V2
 from model.mobile_fpnssd.net import MobileFPNSSD512
+# yolov3 stuff
+import model.yolov3.test
+from model.yolov3.models import *
+from model.yolov3.utils.datasets import *
+from model.yolov3.utils.utils import *
+# 
 import numpy as np
 import time
 from utils.evaluation import evaluate_detections
@@ -43,7 +49,7 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='7', help='The version of config')
+parser.add_argument('--version', default='13', help='The version of config')
 # parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
@@ -63,8 +69,8 @@ parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight dec
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
 parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom Server')
-parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -84,7 +90,7 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 
 def main():
-    all_versions = [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12]
+    all_versions = [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13]
     args.cfg = all_versions[int(args.version)-1]
     args.basenet = args.cfg['base'] + '_reducedfc.pth'
     args.outshape = args.cfg['min_dim']
@@ -134,6 +140,31 @@ def main():
         net = MobileSSDLite300V2(args.num_classes, args.cfg)
     elif args.cfg['base'] == 'fpn_mobile_512':
         net = MobileFPNSSD512(args.num_classes, args.cfg)
+    elif args.cfg['base'] == 'yolov3':
+        net = Darknet('model/yolov3/cfg/yolov3-spp.cfg', arc='default')
+        net.nc = 25  # attach number of classes to model
+        net.arc = 'default'  # attach yolo architecture
+        hyp = {'giou': 3.54,  # giou loss gain
+               'cls': 37.4,  # cls loss gain
+               'cls_pw': 1.0,  # cls BCELoss positive_weight
+               'obj': 49.5,  # obj loss gain (*=img_size/320 if img_size != 320)
+               'obj_pw': 1.0,  # obj BCELoss positive_weight
+               'iou_t': 0.225,  # iou training threshold
+               'lr0': 0.00579,  # initial learning rate (SGD=1E-3, Adam=9E-5)
+               'lrf': -4.,  # final LambdaLR learning rate = lr0 * (10 ** lrf)
+               'momentum': 0.937,  # SGD momentum
+               'weight_decay': 0.000484,  # optimizer weight decay
+               'fl_gamma': 0.5,  # focal loss gamma
+               'hsv_h': 0.0138,  # image HSV-Hue augmentation (fraction)
+               'hsv_s': 0.678,  # image HSV-Saturation augmentation (fraction)
+               'hsv_v': 0.36,  # image HSV-Value augmentation (fraction)
+               'degrees': 1.98,  # image rotation (+/- deg)
+               'translate': 0.05,  # image translation (+/- fraction)
+               'scale': 0.05,  # image scale (+/- gain)
+               'shear': 0.641}  # image shear (+/- deg)
+        hyp['obj'] *= 416 / 320.
+        net.hyp = hyp  # attach hyperparameters to model
+        net.class_weights = torch.ones(1,25)/25  # attach class weights
     else:
         return 
 
@@ -210,20 +241,38 @@ def train(args, net, optimizer, criterion, scheduler):
     while iteration <= args.max_iter:
         for i, (images, targets, _) in enumerate(train_data_loader):
 
+            # change targets format when using yolov3
+            if args.cfg['base'] == 'yolov3':
+                num_targets = sum([len(t) for t in targets])
+                tmp = torch.zeros(num_targets,6)
+                tid = 0
+                for img_id,target in enumerate(targets):
+                    for label in target:
+                        tmp[tid,0] = img_id
+                        tmp[tid,1] = label[4]
+                        tmp[tid,2:] = label[:4]
+                        tid += 1
+                targets = tmp
+            
             if iteration > args.max_iter:
                 break
             iteration += 1
             if args.cuda:
                 images = images.cuda(0, non_blocking=True)
-                targets = [anno.cuda(0, non_blocking=True) for anno in targets]
+                targets = targets.cuda(0, non_blocking=True)
                 
             # forward
             out = net(images)
             # backprop
             optimizer.zero_grad()
 
-            loss_l, loss_c = criterion(out, targets)
-            loss = loss_l + loss_c
+            if args.cfg['base'] == 'yolov3':
+                loss, loss_items = compute_loss(out, targets, net)
+                loss_l, loss_o, loss_c, _ = loss_items
+            else:
+                loss_l, loss_c = criterion(out, targets)
+                loss = loss_l + loss_c
+
             loss.backward()
             optimizer.step()
             scheduler.step()
@@ -232,7 +281,7 @@ def train(args, net, optimizer, criterion, scheduler):
             # print('Loss data type ',type(loc_loss))
             loc_losses.update(loc_loss)
             cls_losses.update(conf_loss)
-            losses.update((loc_loss + conf_loss)/2.0)
+            losses.update(loss.item()/2.0)
 
 
             if iteration % args.print_step == 0 and iteration>0:
@@ -240,7 +289,13 @@ def train(args, net, optimizer, criterion, scheduler):
                 t1 = time.perf_counter()
                 batch_time.update(t1 - t0)
 
-                print_line = 'E{:02d} Iter {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) ' \
+                if args.cfg['base'] == 'yolov3':
+                    print_line = 'E{:02d} Iter {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) ' \
+                             'obj-loss {:.3f} avg-loss {:.3f}({:.3f}) Timer {:0.3f}({:0.3f})'.format(epoch_count,
+                              iteration, args.max_iter, loc_losses.val, loc_losses.avg, cls_losses.val,
+                              cls_losses.avg, loss_o.item(), losses.val, losses.avg, batch_time.val, batch_time.avg)
+                else:
+                    print_line = 'E{:02d} Iter {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) ' \
                              'avg-loss {:.3f}({:.3f}) Timer {:0.3f}({:0.3f})'.format(epoch_count,
                               iteration, args.max_iter, loc_losses.val, loc_losses.avg, cls_losses.val,
                               cls_losses.avg, losses.val, losses.avg, batch_time.val, batch_time.avg)
@@ -268,14 +323,24 @@ def train(args, net, optimizer, criterion, scheduler):
                            repr(iteration) + '.pth')
 
                 net.eval() # switch net to evaluation mode
-                mAP, ap_all, ap_strs = validate(args, net, val_data_loader, val_dataset, iteration, iou_thresh=args.iou_thresh)
+                if args.cfg['base'] == 'yolov3':
+                    results, _ = test.test('model/yolov3/cfg/yolov3-spp.cfg',
+                                          batch_size=16 * 2,
+                                          img_size=416,
+                                          model=net,
+                                          conf_thres=0.001,  
+                                          iou_thres=0.5,
+                                          dataloader=testloader)
+                    prt_str = '%10.3g' * 7 % results
+                else:
+                    mAP, ap_all, ap_strs = validate(args, net, val_data_loader, val_dataset, iteration, iou_thresh=args.iou_thresh)
 
-                for ap_str in ap_strs:
-                    print(ap_str)
-                    log_file.write(ap_str+'\n')
-                ptr_str = '\nMEANAP:::=>'+str(mAP)+'\n'
-                print(ptr_str)
-                log_file.write(ptr_str)
+                    for ap_str in ap_strs:
+                        print(ap_str)
+                        log_file.write(ap_str+'\n')
+                    ptr_str = '\nMEANAP:::=>'+str(mAP)+'\n'
+                    print(ptr_str)
+                    log_file.write(ptr_str)
 
                 net.train() # Switch net back to training mode
                 torch.cuda.synchronize()
@@ -349,6 +414,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                     boxes = decoded_boxes.clone()
                     l_mask = c_mask.unsqueeze(1).expand_as(boxes)
                     boxes = boxes[l_mask].view(-1, 4)
+                    # changes happen up to here --------------------------------
                     # idx of highest scoring and non-overlapping boxes per class
                     ids, counts = nms(boxes, scores, args.nms_thresh, args.topk)  # idsn - ids after nms
                     scores = scores[ids[:counts]].cpu().numpy()
