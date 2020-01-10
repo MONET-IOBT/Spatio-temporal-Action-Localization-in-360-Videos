@@ -325,13 +325,13 @@ def train(args, net, optimizer, criterion, scheduler):
                 net.eval() # switch net to evaluation mode
                 if args.cfg['base'] == 'yolov3':
                     results, _ = test.test('model/yolov3/cfg/yolov3-spp.cfg',
-                                          batch_size=16 * 2,
-                                          img_size=416,
                                           model=net,
                                           conf_thres=0.001,  
                                           iou_thres=0.5,
                                           dataloader=val_data_loader)
-                    prt_str = '%10.3g' * 7 % results
+                    ptr_str = '%10.3g' * 7 % results
+                    print(ptr_str)
+                    log_file.write(ptr_str)
                 else:
                     mAP, ap_all, ap_strs = validate(args, net, val_data_loader, val_dataset, iteration, iou_thresh=args.iou_thresh)
 

@@ -11,38 +11,14 @@ from model.yolov3.utils.utils import *
 
 
 def test(cfg,
-         weights=None,
-         batch_size=16,
-         img_size=416,
          conf_thres=0.001,
          iou_thres=0.5,  # for nms
          model=None,
          dataloader=None):
     assert(dataloader is not None)
     # Initialize/load model and set device
-    if model is None:
-        device = torch_utils.select_device(opt.device, batch_size=batch_size)
-        verbose = opt.task == 'test'
-
-        # Remove previous
-        for f in glob.glob('test_batch*.jpg'):
-            os.remove(f)
-
-        # Initialize model
-        model = Darknet(cfg, img_size).to(device)
-
-        # Load weights
-        attempt_download(weights)
-        if weights.endswith('.pt'):  # pytorch format
-            model.load_state_dict(torch.load(weights, map_location=device)['model'])
-        else:  # darknet format
-            _ = load_darknet_weights(model, weights)
-
-        if torch.cuda.device_count() > 1:
-            model = nn.DataParallel(model)
-    else:  # called by train.py
-        device = next(model.parameters()).device  # get model device
-        verbose = False
+    device = next(model.parameters()).device  # get model device
+    verbose = False
 
     # Configure run
     nc = 25  # number of classes
@@ -59,6 +35,7 @@ def test(cfg,
     loss = torch.zeros(3)
     jdict, stats, ap, ap_class = [], [], [], []
     for batch_i, (imgs, targets, _) in enumerate(tqdm(dataloader, desc=s)):
+        if batch_i > 10:break
         # transform targets
         num_targets = sum([len(t) for t in targets])
         tmp = torch.zeros(num_targets,6)
