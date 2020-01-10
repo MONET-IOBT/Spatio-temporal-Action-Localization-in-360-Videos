@@ -58,7 +58,19 @@ def test(cfg,
     p, r, f1, mp, mr, map, mf1 = 0., 0., 0., 0., 0., 0., 0.
     loss = torch.zeros(3)
     jdict, stats, ap, ap_class = [], [], [], []
-    for batch_i, (imgs, targets, paths, shapes) in enumerate(tqdm(dataloader, desc=s)):
+    for batch_i, (imgs, targets, _) in enumerate(tqdm(dataloader, desc=s)):
+        # transform targets
+        num_targets = sum([len(t) for t in targets])
+        tmp = torch.zeros(num_targets,6)
+        tid = 0
+        for img_id,target in enumerate(targets):
+            for label in target:
+                tmp[tid,0] = img_id
+                tmp[tid,1] = label[4]
+                tmp[tid,2:] = label[:4]
+                tid += 1
+        targets = tmp
+        # 
         imgs = imgs.to(device).float() / 255.0  # uint8 to float32, 0 - 255 to 0.0 - 1.0
         targets = targets.to(device)
         _, _, height, width = imgs.shape  # batch size, channels, height, width

@@ -31,7 +31,7 @@ from model.mobile_ssd_v1.net import MobileSSD512
 from model.mobile_ssd_v2.net import MobileSSDLite300V2
 from model.mobile_fpnssd.net import MobileFPNSSD512
 # yolov3 stuff
-import model.yolov3.test
+import model.yolov3.test as test
 from model.yolov3.models import *
 from model.yolov3.utils.datasets import *
 from model.yolov3.utils.utils import *
@@ -69,8 +69,8 @@ parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight dec
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
 parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom Server')
-parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -330,7 +330,7 @@ def train(args, net, optimizer, criterion, scheduler):
                                           model=net,
                                           conf_thres=0.001,  
                                           iou_thres=0.5,
-                                          dataloader=testloader)
+                                          dataloader=val_data_loader)
                     prt_str = '%10.3g' * 7 % results
                 else:
                     mAP, ap_all, ap_strs = validate(args, net, val_data_loader, val_dataset, iteration, iou_thresh=args.iou_thresh)
