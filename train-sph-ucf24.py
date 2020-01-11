@@ -19,7 +19,7 @@ import argparse
 import torch.utils.data as data
 from data.omni_dataset import OmniUCF24, sph_detection_collate
 from data import AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
-from data import v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13
+from data import v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14
 from utils.augmentations import SSDAugmentation
 # from layers.modules import MultiBoxLoss
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
@@ -49,7 +49,7 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='13', help='The version of config')
+parser.add_argument('--version', default='14', help='The version of config')
 # parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
@@ -90,7 +90,7 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 
 def main():
-    all_versions = [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13]
+    all_versions = [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14]
     args.cfg = all_versions[int(args.version)-1]
     args.basenet = args.cfg['base'] + '_reducedfc.pth'
     args.outshape = args.cfg['min_dim']
@@ -323,24 +323,24 @@ def train(args, net, optimizer, criterion, scheduler):
                            repr(iteration) + '.pth')
 
                 net.eval() # switch net to evaluation mode
-                if args.cfg['base'] == 'yolov3':
-                    results, _ = test.test('model/yolov3/cfg/yolov3-spp.cfg',
-                                          model=net,
-                                          conf_thres=0.001,  
-                                          iou_thres=0.5,
-                                          dataloader=val_data_loader)
-                    ptr_str = '%10.3g' * 7 % results
-                    print(ptr_str)
-                    log_file.write(ptr_str)
-                else:
-                    mAP, ap_all, ap_strs = validate(args, net, val_data_loader, val_dataset, iteration, iou_thresh=args.iou_thresh)
+                # if args.cfg['base'] == 'yolov3':
+                #     results, _ = test.test('model/yolov3/cfg/yolov3-spp.cfg',
+                #                           model=net,
+                #                           conf_thres=0.001,  
+                #                           iou_thres=0.5,
+                #                           dataloader=val_data_loader)
+                #     ptr_str = '%10.3g' * 7 % results
+                #     print(ptr_str)
+                #     log_file.write(ptr_str)
+                # else:
+                mAP, ap_all, ap_strs = validate(args, net, val_data_loader, val_dataset, iteration, iou_thresh=args.iou_thresh)
 
-                    for ap_str in ap_strs:
-                        print(ap_str)
-                        log_file.write(ap_str+'\n')
-                    ptr_str = '\nMEANAP:::=>'+str(mAP)+'\n'
-                    print(ptr_str)
-                    log_file.write(ptr_str)
+                for ap_str in ap_strs:
+                    print(ap_str)
+                    log_file.write(ap_str+'\n')
+                ptr_str = '\nMEANAP:::=>'+str(mAP)+'\n'
+                print(ptr_str)
+                log_file.write(ptr_str)
 
                 net.train() # Switch net back to training mode
                 torch.cuda.synchronize()
@@ -376,29 +376,55 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
 
             images, targets, _ = next(batch_iterator)
 
-            if args.cfg['base'] == 'yolov3':
-                num_targets = sum([len(t) for t in targets])
-                tmp = torch.zeros(num_targets,6)
-                tid = 0
-                for img_id,target in enumerate(targets):
-                    for label in target:
-                        tmp[tid,0] = img_id
-                        tmp[tid,1] = label[4]
-                        tmp[tid,2:] = label[:4]
-                        tid += 1
-                targets = tmp
-                
             batch_size = images.size(0)
             height, width = images.size(2), images.size(3)
 
             if args.cuda:
                 images = images.cuda(0, non_blocking=True)
             
-            output = net(images)
+            if args.cfg['base'] == 'yolov3':
+                output, _ = net(images)
 
-            loc_data = output[0]
-            conf_preds = output[1]
-            prior_data = output[2]
+                decoded_boxes_lst = [[] for _ in range(batch_size)]
+                conf_scores_lst = [[] for _ in range(batch_size)]
+
+                def xywh2xyxy(x):
+                    # Convert bounding box format from [x, y, w, h] to [x1, y1, x2, y2]
+                    y = torch.zeros_like(x) if isinstance(x, torch.Tensor) else np.zeros_like(x)
+                    y[:, 0] = x[:, 0] - x[:, 2] / 2
+                    y[:, 1] = x[:, 1] - x[:, 3] / 2
+                    y[:, 2] = x[:, 0] + x[:, 2] / 2
+                    y[:, 3] = x[:, 1] + x[:, 3] / 2
+                    return y
+
+                min_wh, max_wh = 2, 4096
+                for image_i, pred in enumerate(output):
+                    # Apply conf constraint
+                    pred = pred[pred[:, 4] > 0.001]
+
+                    # Apply width-height constraint
+                    pred = pred[(pred[:, 2:4] > min_wh).all(1) & (pred[:, 2:4] < max_wh).all(1)]
+
+                    # If none remain process next image
+                    if len(pred) == 0:
+                        continue
+
+                    # Compute conf
+                    torch.sigmoid_(pred[..., 5:])
+                    pred[..., 5:] *= pred[..., 4:5]  # conf = obj_conf * cls_conf
+
+                    # Box (center x, center y, width, height) to (x1, y1, x2, y2)
+                    box = xywh2xyxy(pred[:, :4])
+
+                    decoded_boxes_lst[image_i] = box.clone()
+                    conf_scores_lst[image_i] = pred[..., 5:].clone()
+
+            else:
+                output = net(images)
+
+                loc_data = output[0]
+                conf_preds = output[1]
+                prior_data = output[2]
 
             if print_time and val_itr%val_step == 0:
                 torch.cuda.synchronize()
@@ -412,8 +438,12 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                 gt[:,1] *= height
                 gt[:,3] *= height
                 gt_boxes.append(gt)
-                decoded_boxes = decode(loc_data[b].data, prior_data.data, args.cfg['variance']).clone()
-                conf_scores = net.softmax(conf_preds[b]).data.clone()
+                if args.cfg['base'] == 'yolov3':
+                    decoded_boxes = decoded_boxes_lst[b]
+                    conf_scores = conf_scores_lst[b]
+                else:
+                    decoded_boxes = decode(loc_data[b].data, prior_data.data, args.cfg['variance']).clone()
+                    conf_scores = net.softmax(conf_preds[b]).data.clone()
                 # print(conf_scores.sum(1), conf_scores.shape)
                 for cl_ind in range(1, num_classes):
                     scores = conf_scores[:, cl_ind].squeeze()
@@ -433,10 +463,11 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                     scores = scores[ids[:counts]].cpu().numpy()
                     boxes = boxes[ids[:counts]].cpu().numpy()
                     # print('boxes sahpe',boxes.shape)
-                    boxes[:,0] *= width
-                    boxes[:,2] *= width
-                    boxes[:,1] *= height
-                    boxes[:,3] *= height
+                    if not args.cfg['base'] == 'yolov3':
+                        boxes[:,0] *= width
+                        boxes[:,2] *= width
+                        boxes[:,1] *= height
+                        boxes[:,3] *= height
 
                     cls_dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=True)
 
