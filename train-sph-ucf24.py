@@ -259,7 +259,10 @@ def train(args, net, optimizer, criterion, scheduler):
             iteration += 1
             if args.cuda:
                 images = images.cuda(0, non_blocking=True)
-                targets = targets.cuda(0, non_blocking=True)
+                if args.cfg['base'] == 'yolov3':
+                    targets = targets.cuda(0, non_blocking=True)
+                else:
+                    targets = [anno.cuda(0, non_blocking=True) for anno in targets]
                 
             # forward
             out = net(images)
@@ -410,14 +413,13 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                         continue
 
                     # Compute conf
-                    torch.sigmoid_(pred[..., 5:])
-                    pred[..., 5:] *= pred[..., 4:5]  # conf = obj_conf * cls_conf
+                    pred[:,5:] = F.softmax(pred[:, 5:], 1)
 
                     # Box (center x, center y, width, height) to (x1, y1, x2, y2)
                     box = xywh2xyxy(pred[:, :4])
 
                     decoded_boxes_lst[image_i] = box.clone()
-                    conf_scores_lst[image_i] = pred[..., 5:].clone()
+                    conf_scores_lst[image_i] = pred[:, 4:].clone()
 
             else:
                 output = net(images)
@@ -444,6 +446,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                 else:
                     decoded_boxes = decode(loc_data[b].data, prior_data.data, args.cfg['variance']).clone()
                     conf_scores = net.softmax(conf_preds[b]).data.clone()
+
                 # print(conf_scores.sum(1), conf_scores.shape)
                 for cl_ind in range(1, num_classes):
                     scores = conf_scores[:, cl_ind].squeeze()
