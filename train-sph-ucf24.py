@@ -375,6 +375,19 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
             t1 = time.perf_counter()
 
             images, targets, _ = next(batch_iterator)
+
+            if args.cfg['base'] == 'yolov3':
+                num_targets = sum([len(t) for t in targets])
+                tmp = torch.zeros(num_targets,6)
+                tid = 0
+                for img_id,target in enumerate(targets):
+                    for label in target:
+                        tmp[tid,0] = img_id
+                        tmp[tid,1] = label[4]
+                        tmp[tid,2:] = label[:4]
+                        tid += 1
+                targets = tmp
+                
             batch_size = images.size(0)
             height, width = images.size(2), images.size(3)
 

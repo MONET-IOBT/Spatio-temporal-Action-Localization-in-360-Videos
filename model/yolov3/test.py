@@ -29,13 +29,11 @@ def test(cfg,
 
     seen = 0
     model.eval()
-    coco91class = coco80_to_coco91_class()
     s = ('%20s' + '%10s' * 6) % ('Class', 'Images', 'Targets', 'P', 'R', 'mAP@0.5', 'F1')
     p, r, f1, mp, mr, map, mf1 = 0., 0., 0., 0., 0., 0., 0.
     loss = torch.zeros(3)
     jdict, stats, ap, ap_class = [], [], [], []
     for batch_i, (imgs, targets, _) in enumerate(tqdm(dataloader, desc=s)):
-        if batch_i > 10:break
         # transform targets
         num_targets = sum([len(t) for t in targets])
         tmp = torch.zeros(num_targets,6)
