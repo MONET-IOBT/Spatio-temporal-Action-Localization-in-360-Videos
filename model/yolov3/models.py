@@ -456,8 +456,8 @@ def attempt_download(weights):
 
 if __name__ == '__main__':
     model = Darknet('cfg/yolov3-spp.cfg', arc='default')
-    model = model.cuda()
-    image = torch.randn(4,3,512,512).cuda()
+    model = model
+    image = torch.randn(4,3,512,512)
 
     model.train()
     output = model(image)
@@ -472,25 +472,25 @@ if __name__ == '__main__':
     for t in train_out:
         print(t.shape)
 
-    def xywh2xyxy(x):
-        # Convert bounding box format from [x, y, w, h] to [x1, y1, x2, y2]
-        y = torch.zeros_like(x) if isinstance(x, torch.Tensor) else np.zeros_like(x)
-        y[:, 0] = x[:, 0] - x[:, 2] / 2
-        y[:, 1] = x[:, 1] - x[:, 3] / 2
-        y[:, 2] = x[:, 0] + x[:, 2] / 2
-        y[:, 3] = x[:, 1] + x[:, 3] / 2
-        return y
+    # def xywh2xyxy(x):
+    #     # Convert bounding box format from [x, y, w, h] to [x1, y1, x2, y2]
+    #     y = torch.zeros_like(x) if isinstance(x, torch.Tensor) else np.zeros_like(x)
+    #     y[:, 0] = x[:, 0] - x[:, 2] / 2
+    #     y[:, 1] = x[:, 1] - x[:, 3] / 2
+    #     y[:, 2] = x[:, 0] + x[:, 2] / 2
+    #     y[:, 3] = x[:, 1] + x[:, 3] / 2
+    #     return y
 
-    min_wh, max_wh = 2, 4096
-    for image_i, pred in enumerate(inf_out):
-        pred = pred[(pred[:, 2:4] > min_wh).all(1) & (pred[:, 2:4] < max_wh).all(1)]
-        pred = pred[pred[:, 4] > 0.001]
+    # min_wh, max_wh = 2, 4096
+    # for image_i, pred in enumerate(inf_out):
+    #     pred = pred[(pred[:, 2:4] > min_wh).all(1) & (pred[:, 2:4] < max_wh).all(1)]
+    #     pred = pred[pred[:, 4] > 0.001]
 
-        if not torch.isfinite(pred).all():
-            pred = pred[torch.isfinite(pred).all(1)]
+    #     if not torch.isfinite(pred).all():
+    #         pred = pred[torch.isfinite(pred).all(1)]
 
-        loc_data = xywh2xyxy(pred[:,:4])
-        conf_preds = pred[:,5:]
+    #     loc_data = xywh2xyxy(pred[:,:4])
+    #     conf_preds = pred[:,5:]
 
     # change targets format
     # image_id, x,y,w,h, label
