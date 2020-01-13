@@ -141,6 +141,7 @@ def main():
     elif args.cfg['base'] == 'fpn_mobile_512':
         net = MobileFPNSSD512(args.num_classes, args.cfg)
     elif args.cfg['base'] == 'yolov3':
+        args.conf_thresh = 0.001
         net = Darknet('model/yolov3/cfg/yolov3-spp.cfg', arc='default')
         net.nc = 25  # attach number of classes to model
         net.arc = 'default'  # attach yolo architecture
@@ -413,12 +414,17 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                         continue
 
                     # Compute conf
-                    pred[:,5:] = F.softmax(pred[:, 5:], 1)
+                    torch.sigmoid_(pred[..., 5:])
+                    pred[..., 5:] *= pred[..., 4:5]
 
                     # Box (center x, center y, width, height) to (x1, y1, x2, y2)
                     box = xywh2xyxy(pred[:, :4])
 
-                    decoded_boxes_lst[image_i] = box.clone()
+                    # Apply finite constraint
+                    if not torch.isfinite(pred).all():
+                        pred = pred[torch.isfinite(pred).all(1)]
+
+                    decoded_boxes_lst[image_i] = pred[:,:4].clone()
                     conf_scores_lst[image_i] = pred[:, 4:].clone()
 
             else:
@@ -461,17 +467,21 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                     l_mask = c_mask.unsqueeze(1).expand_as(boxes)
                     boxes = boxes[l_mask].view(-1, 4)
                     # changes happen up to here --------------------------------
+                    if args.cfg['base'] == 'yolov3':
+                        boxes[:,0] /= width
+                        boxes[:,2] /= width
+                        boxes[:,1] /= height
+                        boxes[:,3] /= height
                     # idx of highest scoring and non-overlapping boxes per class
                     ids, counts = nms(boxes, scores, args.nms_thresh, args.topk)  # idsn - ids after nms
                     scores = scores[ids[:counts]].cpu().numpy()
                     boxes = boxes[ids[:counts]].cpu().numpy()
                     # print('boxes sahpe',boxes.shape)
-                    if not args.cfg['base'] == 'yolov3':
-                        boxes[:,0] *= width
-                        boxes[:,2] *= width
-                        boxes[:,1] *= height
-                        boxes[:,3] *= height
-
+                    boxes[:, 0] *= width
+                    boxes[:, 2] *= width
+                    boxes[:, 1] *= height
+                    boxes[:, 3] *= height
+                    
                     cls_dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=True)
 
                     det_boxes[cl_ind-1].append(cls_dets)
