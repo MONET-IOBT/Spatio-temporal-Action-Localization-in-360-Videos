@@ -292,7 +292,7 @@ def train(args, net, optimizer, criterion, scheduler):
                 t1 = time.perf_counter()
                 batch_time.update(t1 - t0)
 
-                rint_line = 'E{:02d} Iter {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) ' \
+                print_line = 'E{:02d} Iter {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) ' \
                          'avg-loss {:.3f}({:.3f}) Timer {:0.3f}({:0.3f})'.format(epoch_count,
                           iteration, args.max_iter, loc_losses.val, loc_losses.avg, cls_losses.val,
                           cls_losses.avg, losses.val, losses.avg, batch_time.val, batch_time.avg)
