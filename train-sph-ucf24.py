@@ -49,13 +49,13 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='14', help='The version of config')
+parser.add_argument('--version', default='13', help='The version of config')
 # parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=16, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--max_epoch', default=6, type=int, help='Number of training epochs')
@@ -327,24 +327,24 @@ def train(args, net, optimizer, criterion, scheduler):
                            repr(iteration) + '.pth')
 
                 net.eval() # switch net to evaluation mode
-                # if args.cfg['base'] == 'yolov3':
-                #     results, _ = test.test('model/yolov3/cfg/yolov3-spp.cfg',
-                #                           model=net,
-                #                           conf_thres=0.001,  
-                #                           iou_thres=0.5,
-                #                           dataloader=val_data_loader)
-                #     ptr_str = '%10.3g' * 7 % results
-                #     print(ptr_str)
-                #     log_file.write(ptr_str)
-                # else:
-                mAP, ap_all, ap_strs = validate(args, net, val_data_loader, val_dataset, iteration, iou_thresh=args.iou_thresh)
+                if args.cfg['base'] == 'yolov3':
+                    results, _ = test.test('model/yolov3/cfg/yolov3-spp.cfg',
+                                          model=net,
+                                          conf_thres=0.001,  
+                                          iou_thres=0.5,
+                                          dataloader=val_data_loader)
+                    ptr_str = '%10.3g' * 7 % results
+                    print(ptr_str)
+                    log_file.write(ptr_str)
+                else:
+                    mAP, ap_all, ap_strs = validate(args, net, val_data_loader, val_dataset, iteration, iou_thresh=args.iou_thresh)
 
-                for ap_str in ap_strs:
-                    print(ap_str)
-                    log_file.write(ap_str+'\n')
-                ptr_str = '\nMEANAP:::=>'+str(mAP)+'\n'
-                print(ptr_str)
-                log_file.write(ptr_str)
+                    for ap_str in ap_strs:
+                        print(ap_str)
+                        log_file.write(ap_str+'\n')
+                    ptr_str = '\nMEANAP:::=>'+str(mAP)+'\n'
+                    print(ptr_str)
+                    log_file.write(ptr_str)
 
                 net.train() # Switch net back to training mode
                 torch.cuda.synchronize()
