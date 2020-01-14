@@ -441,6 +441,7 @@ def compute_loss(p, targets, model):  # predictions, targets, model
         lcls *= 3 / ng / model.nc
 
     loss = lbox + lobj + lcls
+    assert(lobj == ft([0]))
     return loss, torch.cat((lbox, lobj, lcls, loss)).detach()
 
 

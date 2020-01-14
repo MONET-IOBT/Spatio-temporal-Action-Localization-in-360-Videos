@@ -49,7 +49,7 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='13', help='The version of config')
+parser.add_argument('--version', default='14', help='The version of config')
 # parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
@@ -141,10 +141,9 @@ def main():
     elif args.cfg['base'] == 'fpn_mobile_512':
         net = MobileFPNSSD512(args.num_classes, args.cfg)
     elif args.cfg['base'] == 'yolov3':
-        args.conf_thresh = 0.001
-        net = Darknet('model/yolov3/cfg/yolov3-spp.cfg', arc='default')
-        net.nc = 25  # attach number of classes to model
-        net.arc = 'default'  # attach yolo architecture
+        net = Darknet('model/yolov3/cfg/yolov3-spp.cfg', arc='CE')
+        net.nc = 24  # attach number of classes to model
+        net.arc = 'CE'  # attach yolo architecture
         hyp = {'giou': 3.54,  # giou loss gain
                'cls': 37.4,  # cls loss gain
                'cls_pw': 1.0,  # cls BCELoss positive_weight
@@ -272,7 +271,7 @@ def train(args, net, optimizer, criterion, scheduler):
 
             if args.cfg['base'] == 'yolov3':
                 loss, loss_items = compute_loss(out, targets, net)
-                loss_l, loss_o, loss_c, _ = loss_items
+                loss_l, _, loss_c, _ = loss_items
             else:
                 loss_l, loss_c = criterion(out, targets)
                 loss = loss_l + loss_c
@@ -293,16 +292,10 @@ def train(args, net, optimizer, criterion, scheduler):
                 t1 = time.perf_counter()
                 batch_time.update(t1 - t0)
 
-                if args.cfg['base'] == 'yolov3':
-                    print_line = 'E{:02d} Iter {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) ' \
-                             'obj-loss {:.3f} avg-loss {:.3f}({:.3f}) Timer {:0.3f}({:0.3f})'.format(epoch_count,
-                              iteration, args.max_iter, loc_losses.val, loc_losses.avg, cls_losses.val,
-                              cls_losses.avg, loss_o.item(), losses.val, losses.avg, batch_time.val, batch_time.avg)
-                else:
-                    print_line = 'E{:02d} Iter {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) ' \
-                             'avg-loss {:.3f}({:.3f}) Timer {:0.3f}({:0.3f})'.format(epoch_count,
-                              iteration, args.max_iter, loc_losses.val, loc_losses.avg, cls_losses.val,
-                              cls_losses.avg, losses.val, losses.avg, batch_time.val, batch_time.avg)
+                rint_line = 'E{:02d} Iter {:06d}/{:06d} loc-loss {:.3f}({:.3f}) cls-loss {:.3f}({:.3f}) ' \
+                         'avg-loss {:.3f}({:.3f}) Timer {:0.3f}({:0.3f})'.format(epoch_count,
+                          iteration, args.max_iter, loc_losses.val, loc_losses.avg, cls_losses.val,
+                          cls_losses.avg, losses.val, losses.avg, batch_time.val, batch_time.avg)
 
                 torch.cuda.synchronize()
                 t0 = time.perf_counter()
@@ -327,24 +320,24 @@ def train(args, net, optimizer, criterion, scheduler):
                            repr(iteration) + '.pth')
 
                 net.eval() # switch net to evaluation mode
-                if args.cfg['base'] == 'yolov3':
-                    results, _ = test.test('model/yolov3/cfg/yolov3-spp.cfg',
-                                          model=net,
-                                          conf_thres=0.001,  
-                                          iou_thres=0.5,
-                                          dataloader=val_data_loader)
-                    ptr_str = '%10.3g' * 7 % results
-                    print(ptr_str)
-                    log_file.write(ptr_str)
-                else:
-                    mAP, ap_all, ap_strs = validate(args, net, val_data_loader, val_dataset, iteration, iou_thresh=args.iou_thresh)
+                # if args.cfg['base'] == 'yolov3':
+                #     results, _ = test.test('model/yolov3/cfg/yolov3-spp.cfg',
+                #                           model=net,
+                #                           conf_thres=0.001,  
+                #                           iou_thres=0.5,
+                #                           dataloader=val_data_loader)
+                #     ptr_str = '%10.3g' * 7 % results
+                #     print(ptr_str)
+                #     log_file.write(ptr_str)
+                # else:
+                mAP, ap_all, ap_strs = validate(args, net, val_data_loader, val_dataset, iteration, iou_thresh=args.iou_thresh)
 
-                    for ap_str in ap_strs:
-                        print(ap_str)
-                        log_file.write(ap_str+'\n')
-                    ptr_str = '\nMEANAP:::=>'+str(mAP)+'\n'
-                    print(ptr_str)
-                    log_file.write(ptr_str)
+                for ap_str in ap_strs:
+                    print(ap_str)
+                    log_file.write(ap_str+'\n')
+                ptr_str = '\nMEANAP:::=>'+str(mAP)+'\n'
+                print(ptr_str)
+                log_file.write(ptr_str)
 
                 net.train() # Switch net back to training mode
                 torch.cuda.synchronize()
@@ -412,10 +405,6 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                     # If none remain process next image
                     if len(pred) == 0:
                         continue
-
-                    # Compute conf
-                    torch.sigmoid_(pred[..., 5:])
-                    pred[..., 5:] *= pred[..., 4:5]
 
                     # Box (center x, center y, width, height) to (x1, y1, x2, y2)
                     box = xywh2xyxy(pred[:, :4])
