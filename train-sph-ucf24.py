@@ -19,7 +19,7 @@ import argparse
 import torch.utils.data as data
 from data.omni_dataset import OmniUCF24, sph_detection_collate
 from data import AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
-from data import v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14
+from data import v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13
 from utils.augmentations import SSDAugmentation
 # from layers.modules import MultiBoxLoss
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
