@@ -49,7 +49,7 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='14', help='The version of config')
+parser.add_argument('--version', default='13', help='The version of config')
 # parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
@@ -90,7 +90,7 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 
 def main():
-    all_versions = [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14]
+    all_versions = [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13]
     args.cfg = all_versions[int(args.version)-1]
     args.basenet = args.cfg['base'] + '_reducedfc.pth'
     args.outshape = args.cfg['min_dim']
@@ -394,11 +394,8 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                     y[:, 3] = x[:, 1] + x[:, 3] / 2
                     return y
 
-                min_wh, max_wh = 2, 4096
+                min_wh, max_wh = 2, 416
                 for image_i, pred in enumerate(output):
-                    # Apply conf constraint
-                    pred = pred[pred[:, 4] > 0.001]
-
                     # Apply width-height constraint
                     pred = pred[(pred[:, 2:4] > min_wh).all(1) & (pred[:, 2:4] < max_wh).all(1)]
 
@@ -407,7 +404,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                         continue
 
                     # Box (center x, center y, width, height) to (x1, y1, x2, y2)
-                    box = xywh2xyxy(pred[:, :4])
+                    pred[:, :4] = xywh2xyxy(pred[:, :4])
 
                     # Apply finite constraint
                     if not torch.isfinite(pred).all():

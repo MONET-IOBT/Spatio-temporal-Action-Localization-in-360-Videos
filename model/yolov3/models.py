@@ -216,7 +216,7 @@ class YOLOLayer(nn.Module):
                 io[..., 4] = 1
             elif 'CE' in self.arc:  # unified CE (1 background + 80 classes)
                 io[..., 4:] = F.softmax(io[..., 4:], dim=4)
-                io[..., 4] = 1
+                # io[..., 4] = 1
 
             if self.nc == 1:
                 io[..., 5] = 1  # single-class model https://github.com/ultralytics/yolov3/issues/235
