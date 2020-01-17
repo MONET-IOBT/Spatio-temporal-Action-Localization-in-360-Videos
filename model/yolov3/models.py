@@ -170,7 +170,7 @@ class YOLOLayer(nn.Module):
             if (self.nx, self.ny) != (nx, ny):
                 create_grids(self, img_size, (nx, ny), p.device, p.dtype)
 
-        # p.view(bs, 255, 13, 13) -- > (bs, 3, 13, 13, 85)  # (bs, anchors, grid, grid, classes + xywh)
+        # p.view(bs, 87, 13, 13) -- > (bs, 3, 13, 13, 29)  # (bs, anchors, grid, grid, classes + xywh)
         p = p.view(bs, self.na, self.no, self.ny, self.nx).permute(0, 1, 3, 4, 2).contiguous()  # prediction
 
         return p
@@ -266,12 +266,13 @@ class Darknet(nn.Module):
             elif mtype == 'shortcut':
                 x = x + layer_outputs[int(mdef['from'])]
             elif mtype == 'yolo':
-                output = torch.cat((output,module(x, img_size).view(batch_size,-1,29)),1)
+                tmp = module(x, img_size).view(batch_size,-1,29)
+                output = torch.cat((output,tmp),1)
                 if len(self.priors) == 0:
                     size = torch.Tensor([img_size[0],img_size[1]]).cuda()
                     grid_xy = (module.grid_xy.view(-1,2) + 0.5) * module.stride/size
-                    xy = grid_xy.repeat([1,len(module.anchor_vec)]).view(-1,2)
-                    anchor_vec = module.anchor_vec.repeat([len(grid_xy),1]) * module.stride/size
+                    xy = grid_xy.repeat([len(module.anchor_vec),1])
+                    anchor_vec = module.anchor_vec.repeat([1,len(grid_xy)]).view(-1,2) * module.stride/size
                     prior = torch.cat((xy,anchor_vec),1)
                     priors = torch.cat((priors,prior),0)
             layer_outputs.append(x if i in self.routs else [])
@@ -279,8 +280,8 @@ class Darknet(nn.Module):
         if len(self.priors) == 0:
             self.priors = priors
 
-        loc_preds = output[:,:,:4]
-        cls_preds = output[:,:,4:]
+        loc_preds = output[...,:4]
+        cls_preds = output[...,4:]
         return loc_preds, cls_preds, self.priors
 
     def fuse(self):
@@ -464,8 +465,8 @@ def attempt_download(weights):
 
 if __name__ == '__main__':
     model = Darknet('cfg/yolov3-spp.cfg', arc='default')
-    model = model
-    image = torch.randn(4,3,416,416)
+    model = model.cuda()
+    image = torch.randn(4,3,416,416).cuda()
 
     model.train()
     loc_preds, cls_preds, priors = model(image)
