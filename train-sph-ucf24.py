@@ -55,7 +55,7 @@ parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=16, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=8, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--max_epoch', default=6, type=int, help='Number of training epochs')
@@ -142,29 +142,6 @@ def main():
         net = MobileFPNSSD512(args.num_classes, args.cfg)
     elif args.cfg['base'] == 'yolov3':
         net = Darknet('model/yolov3/cfg/yolov3-spp.cfg', arc='CE')
-        net.nc = 24  # attach number of classes to model
-        net.arc = 'CE'  # attach yolo architecture
-        hyp = {'giou': 3.54,  # giou loss gain
-               'cls': 37.4,  # cls loss gain
-               'cls_pw': 1.0,  # cls BCELoss positive_weight
-               'obj': 49.5,  # obj loss gain (*=img_size/320 if img_size != 320)
-               'obj_pw': 1.0,  # obj BCELoss positive_weight
-               'iou_t': 0.225,  # iou training threshold
-               'lr0': 0.00579,  # initial learning rate (SGD=1E-3, Adam=9E-5)
-               'lrf': -4.,  # final LambdaLR learning rate = lr0 * (10 ** lrf)
-               'momentum': 0.937,  # SGD momentum
-               'weight_decay': 0.000484,  # optimizer weight decay
-               'fl_gamma': 0.5,  # focal loss gamma
-               'hsv_h': 0.0138,  # image HSV-Hue augmentation (fraction)
-               'hsv_s': 0.678,  # image HSV-Saturation augmentation (fraction)
-               'hsv_v': 0.36,  # image HSV-Value augmentation (fraction)
-               'degrees': 1.98,  # image rotation (+/- deg)
-               'translate': 0.05,  # image translation (+/- fraction)
-               'scale': 0.05,  # image scale (+/- gain)
-               'shear': 0.641}  # image shear (+/- deg)
-        hyp['obj'] *= 416 / 320.
-        net.hyp = hyp  # attach hyperparameters to model
-        net.class_weights = torch.ones(1,25)/25  # attach class weights
     else:
         return 
 
@@ -241,40 +218,20 @@ def train(args, net, optimizer, criterion, scheduler):
     while iteration <= args.max_iter:
         for i, (images, targets, _) in enumerate(train_data_loader):
 
-            # change targets format when using yolov3
-            if args.cfg['base'] == 'yolov3':
-                num_targets = sum([len(t) for t in targets])
-                tmp = torch.zeros(num_targets,6)
-                tid = 0
-                for img_id,target in enumerate(targets):
-                    for label in target:
-                        tmp[tid,0] = img_id
-                        tmp[tid,1] = label[4]
-                        tmp[tid,2:] = label[:4]
-                        tid += 1
-                targets = tmp
-            
             if iteration > args.max_iter:
                 break
             iteration += 1
             if args.cuda:
                 images = images.cuda(0, non_blocking=True)
-                if args.cfg['base'] == 'yolov3':
-                    targets = targets.cuda(0, non_blocking=True)
-                else:
-                    targets = [anno.cuda(0, non_blocking=True) for anno in targets]
+                targets = [anno.cuda(0, non_blocking=True) for anno in targets]
                 
             # forward
             out = net(images)
             # backprop
             optimizer.zero_grad()
 
-            if args.cfg['base'] == 'yolov3':
-                loss, loss_items = compute_loss(out, targets, net)
-                loss_l, _, loss_c, _ = loss_items
-            else:
-                loss_l, loss_c = criterion(out, targets)
-                loss = loss_l + loss_c
+            loss_l, loss_c = criterion(out, targets)
+            loss = loss_l + loss_c
 
             loss.backward()
             optimizer.step()
@@ -320,16 +277,6 @@ def train(args, net, optimizer, criterion, scheduler):
                            repr(iteration) + '.pth')
 
                 net.eval() # switch net to evaluation mode
-                # if args.cfg['base'] == 'yolov3':
-                #     results, _ = test.test('model/yolov3/cfg/yolov3-spp.cfg',
-                #                           model=net,
-                #                           conf_thres=0.001,  
-                #                           iou_thres=0.5,
-                #                           dataloader=val_data_loader)
-                #     ptr_str = '%10.3g' * 7 % results
-                #     print(ptr_str)
-                #     log_file.write(ptr_str)
-                # else:
                 mAP, ap_all, ap_strs = validate(args, net, val_data_loader, val_dataset, iteration, iou_thresh=args.iou_thresh)
 
                 for ap_str in ap_strs:
@@ -379,46 +326,11 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
             if args.cuda:
                 images = images.cuda(0, non_blocking=True)
             
-            if args.cfg['base'] == 'yolov3':
-                output, _ = net(images)
+            output = net(images)
 
-                decoded_boxes_lst = [[] for _ in range(batch_size)]
-                conf_scores_lst = [[] for _ in range(batch_size)]
-
-                def xywh2xyxy(x):
-                    # Convert bounding box format from [x, y, w, h] to [x1, y1, x2, y2]
-                    y = torch.zeros_like(x) if isinstance(x, torch.Tensor) else np.zeros_like(x)
-                    y[:, 0] = x[:, 0] - x[:, 2] / 2
-                    y[:, 1] = x[:, 1] - x[:, 3] / 2
-                    y[:, 2] = x[:, 0] + x[:, 2] / 2
-                    y[:, 3] = x[:, 1] + x[:, 3] / 2
-                    return y
-
-                min_wh, max_wh = 2, 416
-                for image_i, pred in enumerate(output):
-                    # Apply width-height constraint
-                    pred = pred[(pred[:, 2:4] > min_wh).all(1) & (pred[:, 2:4] < max_wh).all(1)]
-
-                    # If none remain process next image
-                    if len(pred) == 0:
-                        continue
-
-                    # Box (center x, center y, width, height) to (x1, y1, x2, y2)
-                    pred[:, :4] = xywh2xyxy(pred[:, :4])
-
-                    # Apply finite constraint
-                    if not torch.isfinite(pred).all():
-                        pred = pred[torch.isfinite(pred).all(1)]
-
-                    decoded_boxes_lst[image_i] = pred[:,:4].clone()
-                    conf_scores_lst[image_i] = pred[:, 4:].clone()
-
-            else:
-                output = net(images)
-
-                loc_data = output[0]
-                conf_preds = output[1]
-                prior_data = output[2]
+            loc_data = output[0]
+            conf_preds = output[1]
+            prior_data = output[2]
 
             if print_time and val_itr%val_step == 0:
                 torch.cuda.synchronize()
@@ -432,12 +344,9 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                 gt[:,1] *= height
                 gt[:,3] *= height
                 gt_boxes.append(gt)
-                if args.cfg['base'] == 'yolov3':
-                    decoded_boxes = decoded_boxes_lst[b]
-                    conf_scores = conf_scores_lst[b]
-                else:
-                    decoded_boxes = decode(loc_data[b].data, prior_data.data, args.cfg['variance']).clone()
-                    conf_scores = net.softmax(conf_preds[b]).data.clone()
+                
+                decoded_boxes = decode(loc_data[b].data, prior_data.data, args.cfg['variance']).clone()
+                conf_scores = net.softmax(conf_preds[b]).data.clone()
 
                 # print(conf_scores.sum(1), conf_scores.shape)
                 for cl_ind in range(1, num_classes):
@@ -452,12 +361,6 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                     boxes = decoded_boxes.clone()
                     l_mask = c_mask.unsqueeze(1).expand_as(boxes)
                     boxes = boxes[l_mask].view(-1, 4)
-                    # changes happen up to here --------------------------------
-                    if args.cfg['base'] == 'yolov3':
-                        boxes[:,0] /= width
-                        boxes[:,2] /= width
-                        boxes[:,1] /= height
-                        boxes[:,3] /= height
                     # idx of highest scoring and non-overlapping boxes per class
                     ids, counts = nms(boxes, scores, args.nms_thresh, args.topk)  # idsn - ids after nms
                     scores = scores[ids[:counts]].cpu().numpy()

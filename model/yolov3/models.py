@@ -173,56 +173,55 @@ class YOLOLayer(nn.Module):
         # p.view(bs, 255, 13, 13) -- > (bs, 3, 13, 13, 85)  # (bs, anchors, grid, grid, classes + xywh)
         p = p.view(bs, self.na, self.no, self.ny, self.nx).permute(0, 1, 3, 4, 2).contiguous()  # prediction
 
-        if self.training:
-            return p
+        return p
 
-        elif ONNX_EXPORT:
-            # Constants CAN NOT BE BROADCAST, ensure correct shape!
-            m = self.na * self.nx * self.ny
-            ngu = self.ng.repeat((1, m, 1))
-            grid_xy = self.grid_xy.repeat((1, self.na, 1, 1, 1)).view(1, m, 2)
-            anchor_wh = self.anchor_wh.repeat((1, 1, self.nx, self.ny, 1)).view(1, m, 2) / ngu
+        # elif ONNX_EXPORT:
+        #     # Constants CAN NOT BE BROADCAST, ensure correct shape!
+        #     m = self.na * self.nx * self.ny
+        #     ngu = self.ng.repeat((1, m, 1))
+        #     grid_xy = self.grid_xy.repeat((1, self.na, 1, 1, 1)).view(1, m, 2)
+        #     anchor_wh = self.anchor_wh.repeat((1, 1, self.nx, self.ny, 1)).view(1, m, 2) / ngu
 
-            p = p.view(m, self.no)
-            xy = torch.sigmoid(p[:, 0:2]) + grid_xy[0]  # x, y
-            wh = torch.exp(p[:, 2:4]) * anchor_wh[0]  # width, height
-            p_cls = F.softmax(p[:, 5:self.no], 1) * torch.sigmoid(p[:, 4:5])  # SSD-like conf
-            return torch.cat((xy / ngu[0], wh, p_cls), 1).t()
+        #     p = p.view(m, self.no)
+        #     xy = torch.sigmoid(p[:, 0:2]) + grid_xy[0]  # x, y
+        #     wh = torch.exp(p[:, 2:4]) * anchor_wh[0]  # width, height
+        #     p_cls = F.softmax(p[:, 5:self.no], 1) * torch.sigmoid(p[:, 4:5])  # SSD-like conf
+        #     return torch.cat((xy / ngu[0], wh, p_cls), 1).t()
 
-            # p = p.view(1, m, self.no)
-            # xy = torch.sigmoid(p[..., 0:2]) + grid_xy  # x, y
-            # wh = torch.exp(p[..., 2:4]) * anchor_wh  # width, height
-            # p_conf = torch.sigmoid(p[..., 4:5])  # Conf
-            # p_cls = p[..., 5:self.no]
-            # # Broadcasting only supported on first dimension in CoreML. See onnx-coreml/_operators.py
-            # # p_cls = F.softmax(p_cls, 2) * p_conf  # SSD-like conf
-            # p_cls = torch.exp(p_cls).permute((2, 1, 0))
-            # p_cls = p_cls / p_cls.sum(0).unsqueeze(0) * p_conf.permute((2, 1, 0))  # F.softmax() equivalent
-            # p_cls = p_cls.permute(2, 1, 0)
-            # return torch.cat((xy / ngu, wh, p_conf, p_cls), 2).squeeze().t()
+        #     # p = p.view(1, m, self.no)
+        #     # xy = torch.sigmoid(p[..., 0:2]) + grid_xy  # x, y
+        #     # wh = torch.exp(p[..., 2:4]) * anchor_wh  # width, height
+        #     # p_conf = torch.sigmoid(p[..., 4:5])  # Conf
+        #     # p_cls = p[..., 5:self.no]
+        #     # # Broadcasting only supported on first dimension in CoreML. See onnx-coreml/_operators.py
+        #     # # p_cls = F.softmax(p_cls, 2) * p_conf  # SSD-like conf
+        #     # p_cls = torch.exp(p_cls).permute((2, 1, 0))
+        #     # p_cls = p_cls / p_cls.sum(0).unsqueeze(0) * p_conf.permute((2, 1, 0))  # F.softmax() equivalent
+        #     # p_cls = p_cls.permute(2, 1, 0)
+        #     # return torch.cat((xy / ngu, wh, p_conf, p_cls), 2).squeeze().t()
 
-        else:  # inference
-            # s = 1.5  # scale_xy  (pxy = pxy * s - (s - 1) / 2)
-            io = p.clone()  # inference output
-            io[..., :2] = torch.sigmoid(io[..., :2]) + self.grid_xy  # xy
-            io[..., 2:4] = torch.exp(io[..., 2:4]) * self.anchor_wh  # wh yolo method
-            # io[..., 2:4] = ((torch.sigmoid(io[..., 2:4]) * 2) ** 3) * self.anchor_wh  # wh power method
-            io[..., :4] *= self.stride
+        # else:  # inference
+        #     # s = 1.5  # scale_xy  (pxy = pxy * s - (s - 1) / 2)
+        #     io = p.clone()  # inference output
+        #     io[..., :2] = torch.sigmoid(io[..., :2]) + self.grid_xy  # xy
+        #     io[..., 2:4] = torch.exp(io[..., 2:4]) * self.anchor_wh  # wh yolo method
+        #     # io[..., 2:4] = ((torch.sigmoid(io[..., 2:4]) * 2) ** 3) * self.anchor_wh  # wh power method
+        #     io[..., :4] *= self.stride
 
-            if 'default' in self.arc:  # seperate obj and cls
-                torch.sigmoid_(io[..., 4])
-            elif 'BCE' in self.arc:  # unified BCE (80 classes)
-                torch.sigmoid_(io[..., 5:])
-                io[..., 4] = 1
-            elif 'CE' in self.arc:  # unified CE (1 background + 80 classes)
-                io[..., 4:] = F.softmax(io[..., 4:], dim=4)
-                # io[..., 4] = 1
+        #     if 'default' in self.arc:  # seperate obj and cls
+        #         torch.sigmoid_(io[..., 4])
+        #     elif 'BCE' in self.arc:  # unified BCE (80 classes)
+        #         torch.sigmoid_(io[..., 5:])
+        #         io[..., 4] = 1
+        #     elif 'CE' in self.arc:  # unified CE (1 background + 80 classes)
+        #         io[..., 4:] = F.softmax(io[..., 4:], dim=4)
+        #         # io[..., 4] = 1
 
-            if self.nc == 1:
-                io[..., 5] = 1  # single-class model https://github.com/ultralytics/yolov3/issues/235
+        #     if self.nc == 1:
+        #         io[..., 5] = 1  # single-class model https://github.com/ultralytics/yolov3/issues/235
 
-            # reshape from [1, 3, 13, 13, 85] to [1, 507, 84], remove obj_conf
-            return io.view(bs, -1, self.no), p
+        #     # reshape from [1, 3, 13, 13, 85] to [1, 507, 84], remove obj_conf
+        #     return io.view(bs, -1, self.no), p
 
 
 class Darknet(nn.Module):
@@ -234,15 +233,20 @@ class Darknet(nn.Module):
         self.module_defs = parse_model_cfg(cfg)
         self.module_list, self.routs = create_modules(self.module_defs, img_size, arc)
         self.yolo_layers = get_yolo_layers(self)
+        self.priors = []
 
         # Darknet Header https://github.com/AlexeyAB/darknet/issues/2914#issuecomment-496675346
         self.version = np.array([0, 2, 5], dtype=np.int32)  # (int32) version info: major, minor, revision
         self.seen = np.array([0], dtype=np.int64)  # (int64) number of images seen during training
 
+        self.softmax = nn.Softmax(dim=1).cuda()
+        
     def forward(self, x, var=None):
+        batch_size = x.shape[0]
         img_size = x.shape[-2:]
         layer_outputs = []
-        output = []
+        output = torch.Tensor([]).cuda()
+        priors = torch.Tensor([]).cuda()
 
         for i, (mdef, module) in enumerate(zip(self.module_defs, self.module_list)):
             mtype = mdef['type']
@@ -262,18 +266,22 @@ class Darknet(nn.Module):
             elif mtype == 'shortcut':
                 x = x + layer_outputs[int(mdef['from'])]
             elif mtype == 'yolo':
-                output.append(module(x, img_size))
+                output = torch.cat((output,module(x, img_size).view(batch_size,-1,29)),1)
+                if len(self.priors) == 0:
+                    size = torch.Tensor([img_size[0],img_size[1]]).cuda()
+                    grid_xy = (module.grid_xy.view(-1,2) + 0.5) * module.stride/size
+                    xy = grid_xy.repeat([1,len(module.anchor_vec)]).view(-1,2)
+                    anchor_vec = module.anchor_vec.repeat([len(grid_xy),1]) * module.stride/size
+                    prior = torch.cat((xy,anchor_vec),1)
+                    priors = torch.cat((priors,prior),0)
             layer_outputs.append(x if i in self.routs else [])
 
-        if self.training:
-            return output
-        elif ONNX_EXPORT:
-            output = torch.cat(output, 1)  # cat 3 layers 85 x (507, 2028, 8112) to 85 x 10647
-            nc = self.module_list[self.yolo_layers[0]].nc  # number of classes
-            return output[4:4 + nc].t(), output[0:4].t()  # ONNX scores, boxes
-        else:
-            io, p = list(zip(*output))  # inference output, training output
-            return torch.cat(io, 1), p
+        if len(self.priors) == 0:
+            self.priors = priors
+
+        loc_preds = output[:,:,:4]
+        cls_preds = output[:,:,4:]
+        return loc_preds, cls_preds, self.priors
 
     def fuse(self):
         # Fuse Conv2d + BatchNorm2d layers throughout model
@@ -457,20 +465,20 @@ def attempt_download(weights):
 if __name__ == '__main__':
     model = Darknet('cfg/yolov3-spp.cfg', arc='default')
     model = model
-    image = torch.randn(4,3,512,512)
+    image = torch.randn(4,3,416,416)
 
     model.train()
-    output = model(image)
-    for o in output:
-        print('out',o.shape)
+    loc_preds, cls_preds, priors = model(image)
+    print(loc_preds.shape,cls_preds.shape)
+    print(priors.shape)
 
-    model.eval()
-    inf_out, train_out = model(image)
-    for i in inf_out:
-        print(i.shape)
+    # model.eval()
+    # inf_out, train_out = model(image)
+    # for i in inf_out:
+    #     print(i.shape)
 
-    for t in train_out:
-        print(t.shape)
+    # for t in train_out:
+    #     print(t.shape)
 
     # def xywh2xyxy(x):
     #     # Convert bounding box format from [x, y, w, h] to [x1, y1, x2, y2]
