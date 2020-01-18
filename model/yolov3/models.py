@@ -81,32 +81,6 @@ def create_modules(module_defs, img_size, arc):
                                 yolo_index=yolo_index,  # 0, 1 or 2
                                 arc=arc)  # yolo architecture
 
-            # Initialize preceding Conv2d() bias (https://arxiv.org/pdf/1708.02002.pdf section 3.3)
-            try:
-                if arc == 'defaultpw' or arc == 'Fdefaultpw':  # default with positive weights
-                    b = [-5.0, -5.0]  # obj, cls
-                elif arc == 'default':  # default no pw (40 cls, 80 obj)
-                    b = [-5.0, -5.0]
-                elif arc == 'uBCE':  # unified BCE (80 classes)
-                    b = [0, -9.0]
-                elif arc == 'uCE':  # unified CE (1 background + 80 classes)
-                    b = [10, -0.1]
-                elif arc == 'Fdefault':  # Focal default no pw (28 cls, 21 obj, no pw)
-                    b = [-2.1, -1.8]
-                elif arc == 'uFBCE' or arc == 'uFBCEpw':  # unified FocalBCE (5120 obj, 80 classes)
-                    b = [0, -6.5]
-                elif arc == 'uFCE':  # unified FocalCE (64 cls, 1 background + 80 classes)
-                    b = [7.7, -1.1]
-
-                bias = module_list[-1][0].bias.view(len(mask), -1)  # 255 to 3x85
-                bias[:, 4] += b[0] - bias[:, 4].mean()  # obj
-                bias[:, 5:] += b[1] - bias[:, 5:].mean()  # cls
-                # bias = torch.load('weights/yolov3-spp.bias.pt')[yolo_index]  # list of tensors [3x85, 3x85, 3x85]
-                module_list[-1][0].bias = torch.nn.Parameter(bias.view(-1))
-                # utils.print_model_biases(model)
-            except:
-                print('WARNING: smart bias initialization failure.')
-
         else:
             print('Warning: Unrecognized Layer Type: ' + mdef['type'])
 
@@ -171,7 +145,7 @@ class YOLOLayer(nn.Module):
                 create_grids(self, img_size, (nx, ny), p.device, p.dtype)
 
         # p.view(bs, 87, 13, 13) -- > (bs, 3, 13, 13, 29)  # (bs, anchors, grid, grid, classes + xywh)
-        p = p.view(bs, self.na, self.no, self.ny, self.nx).permute(0, 1, 3, 4, 2).contiguous()  # prediction
+        p = p.permute(0, 2, 3, 1).contiguous()  # prediction
 
         return p
 
@@ -245,8 +219,8 @@ class Darknet(nn.Module):
         batch_size = x.shape[0]
         img_size = x.shape[-2:]
         layer_outputs = []
-        output = torch.Tensor([]).cuda()
-        priors = torch.Tensor([]).cuda()
+        output = []
+        priors = []
 
         for i, (mdef, module) in enumerate(zip(self.module_defs, self.module_list)):
             mtype = mdef['type']
@@ -267,18 +241,19 @@ class Darknet(nn.Module):
                 x = x + layer_outputs[int(mdef['from'])]
             elif mtype == 'yolo':
                 tmp = module(x, img_size).view(batch_size,-1,29)
-                output = torch.cat((output,tmp),1)
+                output.append(tmp)
                 if len(self.priors) == 0:
                     size = torch.Tensor([img_size[0],img_size[1]]).cuda()
                     grid_xy = (module.grid_xy.view(-1,2) + 0.5) * module.stride/size
-                    xy = grid_xy.repeat([len(module.anchor_vec),1])
-                    anchor_vec = module.anchor_vec.repeat([1,len(grid_xy)]).view(-1,2) * module.stride/size
-                    prior = torch.cat((xy,anchor_vec),1)
-                    priors = torch.cat((priors,prior),0)
+                    xy = grid_xy.repeat([1,len(module.anchor_vec)]).view(-1,2)
+                    wh = module.anchor_vec.repeat([len(grid_xy),1]) * module.stride/size
+                    prior = torch.cat((xy,wh),1)
+                    priors.append(prior)
             layer_outputs.append(x if i in self.routs else [])
 
         if len(self.priors) == 0:
-            self.priors = priors
+            self.priors = torch.cat(priors,0)
+        output = torch.cat(output,1)
 
         loc_preds = output[...,:4]
         cls_preds = output[...,4:]
