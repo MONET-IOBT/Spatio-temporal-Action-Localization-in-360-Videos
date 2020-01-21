@@ -10,6 +10,7 @@ from model.fpnssd.fpn import FPN50
 from layers.functions.sph_prior_box import SphPriorBox
 from model.spherenet.sphere_cnn import SphereConv2D, SphereMaxPool2D
 from model.KernelTransformer.KTNLayer import KTNConv
+from data import v6
 
 class FPNSSD512(nn.Module):
 
@@ -124,10 +125,10 @@ def build_ktnconv(imgSize, kernel, bias, stride, padding):
     return ktnconv
 
 def test():
-    net = FPNSSD512(25)
+    net = FPNSSD512(25,v6)
     loc_preds, cls_preds, priors = net(Variable(torch.randn(1,3,512,1024)))
     print(loc_preds.size(), cls_preds.size(), priors.size())
-    print(net.state_dict().keys())
+    print(priors)
 
 if __name__ == '__main__':
     test()

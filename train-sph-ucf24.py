@@ -49,7 +49,7 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='13', help='The version of config')
+parser.add_argument('--version', default='6', help='The version of config')
 # parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
@@ -69,8 +69,8 @@ parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight dec
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
 parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom Server')
-parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -316,7 +316,6 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
                 batch_iterator = iter(val_data_loader)
 
             torch.cuda.synchronize()
-            t1 = time.perf_counter()
 
             images, targets, _ = next(batch_iterator)
 
@@ -326,16 +325,17 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
             if args.cuda:
                 images = images.cuda(0, non_blocking=True)
             
+            t1 = time.perf_counter()
             output = net(images)
-
-            loc_data = output[0]
-            conf_preds = output[1]
-            prior_data = output[2]
 
             if print_time and val_itr%val_step == 0:
                 torch.cuda.synchronize()
                 tf = time.perf_counter()
                 print('Forward Time {:0.3f}'.format(tf-t1))
+
+            loc_data = output[0]
+            conf_preds = output[1]
+            prior_data = output[2]
             
             for b in range(batch_size):
                 gt = targets[b].numpy()

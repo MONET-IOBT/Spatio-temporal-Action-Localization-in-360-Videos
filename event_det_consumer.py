@@ -27,12 +27,17 @@ import argparse
 import numpy as np
 import pickle
 import scipy.io as sio # to save detection as mat files
+import socket
+import sys
+import cv2
+import struct ## new
+import zlib
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='v1', help='The version of config')
+parser.add_argument('--version', default='v5', help='The version of config')
 parser.add_argument('--basenet', default='fpn_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
@@ -76,24 +81,63 @@ else:
 
 
 def test_net(net, save_root, exp_name, input_type, iteration, num_classes, thresh=0.5 ):
-    """ Test a SSD network on an Action image database. """
-    with torch.no_grad():
-        for i in range(5):
-            images = torch.randn(args.test_batch_size,3,*args.outshape)
+    HOST=''
+    PORT=8485
+
+    s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    print('Socket created')
+
+    s.bind((HOST,PORT))
+    print('Socket bind complete')
+    s.listen(10)
+    print('Socket now listening')
+
+    conn,addr=s.accept()
+
+    data = b""
+    payload_size = struct.calcsize(">L")
+    print("payload_size: {}".format(payload_size))
+
+    while True:
+        t1 = time.perf_counter()
+        while len(data) < payload_size:
+            # print("Recv: {}".format(len(data)))
+            data += conn.recv(4096)
+
+        packed_msg_size = data[:payload_size]
+        data = data[payload_size:]
+        msg_size = struct.unpack(">L", packed_msg_size)[0]
+        
+        while len(data) < msg_size:
+            data += conn.recv(4096)
+        frame_data = data[:msg_size]
+        data = data[msg_size:]
+        t2 = time.perf_counter()
+
+        frame=pickle.loads(frame_data, fix_imports=True, encoding="bytes")
+        frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
+
+        images = torch.from_numpy(frame).float().permute(2,0,1).unsqueeze(0)
+
+        with torch.no_grad():
 
             if args.cuda:
                 images = images.cuda()
-            t1 = time.perf_counter()
+            t3 = time.perf_counter()
+            
             output = net(images)
             loc_data = output[0]
             conf_preds = output[1]
             prior_data = output[2]
 
-            print("Input:",images.shape)
-            print("Output:",output[0].shape,output[1].shape)
-
-            tf = time.perf_counter()
-            print('Forward Time {:0.3f}'.format(tf - t1))
+        tf = time.perf_counter()
+        fps = 1/(tf - t1) 
+        print("Input shape:",images.shape,
+            ', receive time {:0.3f}'.format(t2 - t1),
+            ', decode time {:0.3f}'.format(t3 - t2),
+            ', process time {:0.3f}'.format(tf - t3),
+            ', total time {:0.3f}'.format(tf - t1),
+            ', speed {:0.3f}'.format(fps))
             
     return 
 
@@ -123,7 +167,7 @@ def main():
                 net.loc_layers.apply(weights_init)
                 net.cls_layers.apply(weights_init)
             else:
-                net = build_vgg_ssd(args.num_classes, args.cfg)
+                net = build_vgg_ssd(num_classes, args.cfg)
                 net.loc.apply(weights_init)
                 net.conf.apply(weights_init)
         elif args.cfg['base'] == 'mobile_v1_512':
