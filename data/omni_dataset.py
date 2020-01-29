@@ -250,8 +250,8 @@ class OmniDataset(data.Dataset):
         #         for old,new in zip(old_label,label):
         #             old = (int(old[0]),int(old[1]),int(old[2]-old[0]),int(old[3]-old[1]))
         #             if sum(old) == 0:continue
-        #             self.annot_map[videoname][old] = [int(new[0]*1024)+1,\
-        #                                                 int(new[1]*512)+1,\
+        #             self.annot_map[videoname][old] = [int(new[0]*1024),\
+        #                                                 int(new[1]*512),\
         #                                                 int((new[2]-new[0])*1024),\
         #                                                 int((new[3]-new[1])*512)]
         #         if idx%1000 == 0:
@@ -270,6 +270,7 @@ class OmniDataset(data.Dataset):
         #                 old_boxes[i] = self.annot_map[filename][key]
         #     sio.savemat(self.final_annot_location,{'annot':old_annots['annot'][0]})
         #     print('transform finishes')
+        #     exit(0)
 
     def __len__(self):
         return len(self.dataset)
