@@ -71,6 +71,7 @@ if args.cuda and torch.cuda.is_available():
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
+# use the score of a box if the overlaping > T
 def score_of_edge(v1,v2,iouth):
     N2 = len(v2['boxes'])
     score = torch.zeros(1,N2)
@@ -98,64 +99,69 @@ def score_of_edge(v1,v2,iouth):
 
 
 def getPathCount(live_paths):
-    if 'boxes' in live_paths:
-        return len(live_paths['boxes'])
-    return 0
+    return len(live_paths)
 
-def sort_live_path(live_paths,path_order_score,dead_paths,dp_count,gap):
+def sort_live_paths(live_paths,path_order_score,dead_paths,dp_count,gap):
     sorted_live_paths = {}
-    ind = torch.argsort(-path_order_score)
+    ind = np.argsort(-path_order_score)
     lpc = 0
     for lp in range(getPathCount(live_paths)):
-        olp = ind[0,lp]
-        if live_paths[0,olp]['lastfound'] < gap:
+        olp = ind[lp]
+        if live_paths[olp]['lastfound'] < gap:
+            sorted_live_paths[lpc] = {}
             sorted_live_paths[lpc]['boxes'] = live_paths[olp]['boxes']
             sorted_live_paths[lpc]['scores'] = live_paths[olp]['scores']
-            sorted_live_paths[lpc]['allScores'] = live_paths[olp]['allScores']
-            sorted_live_paths[lpc]['pathScore'] = live_paths[olp]['pathScore']
-            sorted_live_paths[lpc]['foundAT'] = live_paths[olp]['foundAT']
+            sorted_live_paths[lpc]['allscores'] = live_paths[olp]['allscores']
+            sorted_live_paths[lpc]['pathscore'] = live_paths[olp]['pathscore']
+            sorted_live_paths[lpc]['foundat'] = live_paths[olp]['foundat']
             sorted_live_paths[lpc]['count'] = live_paths[olp]['count']
             sorted_live_paths[lpc]['lastfound'] = live_paths[olp]['lastfound']
             lpc += 1
         else:
+            dead_paths[dp_count] ={}
             dead_paths[dp_count]['boxes'] = live_paths[olp]['boxes']
             dead_paths[dp_count]['scores'] = live_paths[olp]['scores']
-            dead_paths[dp_count]['allScores'] = live_paths[olp]['allScores']
-            dead_paths[dp_count]['pathScore'] = live_paths[olp]['pathScore']
-            dead_paths[dp_count]['foundAT'] = live_paths[olp]['foundAT']
+            dead_paths[dp_count]['allscores'] = live_paths[olp]['allscores']
+            dead_paths[dp_count]['pathscore'] = live_paths[olp]['pathscore']
+            dead_paths[dp_count]['foundat'] = live_paths[olp]['foundat']
             dead_paths[dp_count]['count'] = live_paths[olp]['count']
             dead_paths[dp_count]['lastfound'] = live_paths[olp]['lastfound']
             dp_count += 1
     return sorted_live_paths,dead_paths,dp_count
 
-def fill_gaps(paths.gap):
+def fill_gaps(path,gap):
+    # fix this found at?
     gap_filled_paths = {}
-    if 'boxes' in paths:
+    if len(path)>0:
         g_count = 0
 
-        for lp in range(getPathCount(paths)):
-            if len(paths[lp]['foundAt']) > gap:
-                gap_filled_paths[g_count]['start'] = path[lp]['foundAt'][0]
-                gap_filled_paths[g_count]['end'] = path[lp]['foundAt'][-1]
-                gap_filled_paths[g_count]['pathScore'] = path[lp]['pathScore']
-                gap_filled_paths[g_count]['foundAt'] = path[lp]['foundAt']
+        for lp in range(getPathCount(path)):
+            if len(path[lp]['foundat']) > gap:
+                gap_filled_paths[g_count] = {}
+                gap_filled_paths[g_count]['start'] = path[lp]['foundat'][0]
+                gap_filled_paths[g_count]['end'] = path[lp]['foundat'][-1]
+                gap_filled_paths[g_count]['pathscore'] = path[lp]['pathscore']
+                gap_filled_paths[g_count]['foundat'] = path[lp]['foundat']
                 gap_filled_paths[g_count]['count'] = path[lp]['count']
                 gap_filled_paths[g_count]['lastfound'] = path[lp]['lastfound']
                 count = 0
                 i = 0
                 while i <= len(path[lp]['scores'])-1:
-                    diff_found = path[lp]['foundAt'][i] - path[lp]['foundAt'][max(0,i-1)]
-                    if count == 0 or diff_found == 1:
-                        gap_filled_paths[g_count]['boxes'][count,:] = path[lp]['boxes'][i,:]
-                        gap_filled_paths[g_count]['scores'][count] = path[lp]['scores'][i]
-                        gap_filled_paths[g_count]['allscores'][count,:] = path[lp]['allscores'][i,:]
+                    diff_found = path[lp]['foundat'][i] - path[lp]['foundat'][max(0,i-1)]
+                    if count == 0:
+                        gap_filled_paths[g_count]['boxes'] = path[lp]['boxes'][i,:].unsqueeze(0)
+                        gap_filled_paths[g_count]['scores'] = path[lp]['scores'][i].unsqueeze(0)
+                        gap_filled_paths[g_count]['allscores'] = path[lp]['allscores'][i,:].unsqueeze(0)
                         i += 1
                         count += 1
                     else:
                         for d in range(diff_found):
-                            gap_filled_paths[g_count]['boxes'][count,:] = path[lp]['boxes'][i,:]
-                            gap_filled_paths[g_count]['scores'][count] = path[lp]['scores'][i]
-                            gap_filled_paths[g_count]['allscores'][count,:] = path[lp]['allscores'][i,:]
+                            gap_filled_paths[g_count]['boxes'] = torch.cat((gap_filled_paths[g_count]['boxes'],
+                                                                path[lp]['boxes'][i,:].unsqueeze(0)),0)
+                            gap_filled_paths[g_count]['scores'] = torch.cat((gap_filled_paths[g_count]['scores'],
+                                                                path[lp]['scores'][i].unsqueeze(0)),0)
+                            gap_filled_paths[g_count]['allscores'] = torch.cat((gap_filled_paths[g_count]['allscores'],
+                                                                path[lp]['allscores'][i,:].unsqueeze(0)),0)
                             count += 1
                         i += 1
                 g_count += 1
@@ -166,24 +172,25 @@ def sort_paths(live_paths):
 
     lp_count = getPathCount(live_paths)
     if lp_count > 0:
-        path_order_score = torch.zeros(1,lp_count)
+        path_order_score = np.zeros(lp_count)
 
         for lp in range(len(live_paths)):
-            scores = -sorted(-live_paths[lp]['scores'])
+            scores,_ = torch.sort(live_paths[lp]['scores'],descending=True)
             num_sc = len(scores)
             path_order_score[lp] = torch.mean(scores[:min(20,num_sc)])
 
-        ind = torch.argsort(-path_order_score)
+        ind = np.argsort(-path_order_score)
 
         for lpc in range(len(live_paths)):
-            olp = ind[0,lpc]
+            olp = ind[lpc]
+            sorted_live_paths[lpc] = {}
             sorted_live_paths[lpc]['start'] = live_paths[olp]['start']
             sorted_live_paths[lpc]['end'] = live_paths[olp]['end']
             sorted_live_paths[lpc]['boxes'] = live_paths[olp]['boxes']
             sorted_live_paths[lpc]['scores'] = live_paths[olp]['scores']
             sorted_live_paths[lpc]['allscores'] = live_paths[olp]['allscores']
             sorted_live_paths[lpc]['pathscore'] = live_paths[olp]['pathscore']
-            sorted_live_paths[lpc]['foundAt'] = live_paths[olp]['foundAt']
+            sorted_live_paths[lpc]['foundat'] = live_paths[olp]['foundat']
             sorted_live_paths[lpc]['count'] = live_paths[olp]['count']
             sorted_live_paths[lpc]['lastfound'] = live_paths[olp]['lastfound']
     return sorted_live_paths
@@ -201,82 +208,89 @@ def incremental_linking(frames,iouth, gap):
         if t == 0:
             for b in range(num_box):
                 live_paths[b] = {}
-                live_paths[b]['boxes'] = frames[t]['boxes'][b,:]
-                live_paths[b]['scores'] = frames[t]['scores'][b]
-                live_paths[b]['allscores'] = frames[t]['allscores'][b,:]
-                live_paths[b]['pathscore'] = frames[t]['score'][b]
-                live_paths[b]['foundAt'] = [1]
+                live_paths[b]['boxes'] = frames[t]['boxes'][b,:].unsqueeze(0)
+                live_paths[b]['scores'] = frames[t]['scores'][b].unsqueeze(0)
+                live_paths[b]['allscores'] = frames[t]['allscores'][b,:].unsqueeze(0)
+                live_paths[b]['pathscore'] = frames[t]['scores'][b].unsqueeze(0)
+                live_paths[b]['foundat'] = [t]
                 live_paths[b]['count'] = 1
                 live_paths[b]['lastfound'] = 0
         else:
             lp_count = getPathCount(live_paths)
 
-            edge_scores = torch.zeros(lp_count,num_box)
+            if num_box > 0:
+                edge_scores = torch.zeros(lp_count,num_box)
 
-            for lp in range(lp_count):
-                edge_scores[lp,:] = score_of_edge(live_paths[lp],frames[t],iouth)
+                for lp in range(lp_count):
+                    edge_scores[lp,:] = score_of_edge(live_paths[lp],frames[t],iouth)
 
             dead_count = 0
-            covered_boxes = torch.zeros(1,num_box)
-            path_order_score = torch.zeros(1,lp_count)
+            covered_boxes = np.zeros(num_box)
+            path_order_score = np.zeros(lp_count)
+            # maybe compare all live path-new box pairs
             for lp in range(lp_count):
                 if live_paths[lp]['lastfound'] < gap:
-                    box_to_lp_score = edge_scores[lp,:]
-                    if sum(box_to_lp_score) > 0:
+                    # all box scores for a live path
+                    if num_box > 0 and sum(edge_scores[lp,:]) > 0:
+                        box_to_lp_score = edge_scores[lp,:]
                         maxInd = torch.argmax(box_to_lp_score)
                         m_score = box_to_lp_score[maxInd]
                         live_paths[lp]['count'] += 1
                         lpc = live_paths[lp]['count']
-
+                        live_paths[lp]['boxes'] = torch.cat((live_paths[lp]['boxes'],
+                                                    frames[t]['boxes'][maxInd,:].unsqueeze(0)),0)
                         live_paths[lp]['scores'] = torch.cat((live_paths[lp]['scores'],
-                                                    frames[t]['boxes'][maxInd,:]),0)
+                                                    frames[t]['scores'][maxInd].unsqueeze(0)),0)
                         live_paths[lp]['allscores'] = torch.cat((live_paths[lp]['allscores'],
-                                                    frames[t]['allscores'][maxInd,:]),0)
+                                                    frames[t]['allscores'][maxInd,:].unsqueeze(0)),0)
                         live_paths[lp]['pathscore'] += m_score
-                        live_paths[lp]['foundAt'] += [t]
+                        live_paths[lp]['foundat'] += [t]
                         live_paths[lp]['lastfound'] = 0
                         edge_scores[:,maxInd] = 0
-                        covered_boxes[0,maxInd] = 1
+                        covered_boxes[maxInd] = 1
                     else:
-                        live_paths[b]['lastfound'] += 1
+                        live_paths[lp]['lastfound'] += 1
 
-                    scores = sorted(live_paths[lp]['scores'])
+                    scores,_ = torch.sort(live_paths[lp]['scores'])
                     num_sc = len(scores)
-                    path_order_score[0,lp] = mean(scores[max(0,num_sc-gap):num_sc])
-
+                    path_order_score[lp] = torch.mean(scores[max(0,num_sc-gap):num_sc])
                 else:
                     dead_count += 1
+            
+            # sort paths after appending boxes
             live_paths,dead_paths,dp_count = sort_live_paths(live_paths,path_order_score,
                                                     dead_paths,dp_count,gap)
             lp_count = getPathCount(live_paths)
 
-            if torch.sum(covered_boxes) < num_box:
+            if sum(covered_boxes) < num_box:
                 for b in range(num_box):
-                    if covered_boxes[0,b] == 0:
-                        live_paths[b]['boxes'] = frames[t]['boxes'][b,:]
-                        live_paths[b]['scores'] = frames[t]['scores'][b]
-                        live_paths[b]['allscores'] = frames[t]['allscores'][b,:]
-                        live_paths[b]['pathscore'] = frames[t]['score'][b]
-                        live_paths[b]['foundAt'] = [t]
-                        live_paths[b]['count'] = 1
-                        live_paths[b]['lastfound'] = 0
+                    if covered_boxes[b] == 0:
+                        live_paths[lp_count] = {}
+                        live_paths[lp_count]['boxes'] = frames[t]['boxes'][b,:].unsqueeze(0)
+                        live_paths[lp_count]['scores'] = frames[t]['scores'][b].unsqueeze(0)
+                        live_paths[lp_count]['allscores'] = frames[t]['allscores'][b,:].unsqueeze(0)
+                        live_paths[lp_count]['pathscore'] = frames[t]['scores'][b].unsqueeze(0)
+                        live_paths[lp_count]['foundat'] = [t]
+                        live_paths[lp_count]['count'] = 1
+                        live_paths[lp_count]['lastfound'] = 0
                         lp_count += 1
+        
     live_paths = fill_gaps(live_paths,gap)
     dead_paths = fill_gaps(dead_paths,gap)
     lp_count = getPathCount(live_paths)
-    lp += 1
     if 'boxes' in dead_paths:
         for dp in range(len(dead_paths)):
-            live_paths[lp]['start'] = dead_paths[dp]['start']
-            live_paths[lp]['end'] = dead_paths[dp]['end']
-            live_paths[lp]['boxes'] = dead_paths[dp]['boxes']
-            live_paths[lp]['scores'] = dead_paths[dp]['scores']
-            live_paths[lp]['allscores'] = dead_paths[dp]['allscores']
-            live_paths[lp]['pathscore'] = dead_paths[dp]['pathscore']
-            live_paths[lp]['foundAt'] = dead_paths[dp]['foundAt']
-            live_paths[lp]['count'] = dead_paths[dp]['count']
-            live_paths[lp]['lastfound'] = dead_paths[dp]['lastfound']
-            lp += 1
+            live_paths[lp_count] = {}
+            live_paths[lp_count]['start'] = dead_paths[dp]['start']
+            live_paths[lp_count]['end'] = dead_paths[dp]['end']
+            live_paths[lp_count]['boxes'] = dead_paths[dp]['boxes']
+            live_paths[lp_count]['scores'] = dead_paths[dp]['scores']
+            live_paths[lp_count]['allscores'] = dead_paths[dp]['allscores']
+            live_paths[lp_count]['pathscore'] = dead_paths[dp]['pathscore']
+            live_paths[lp_count]['foundat'] = dead_paths[dp]['foundat']
+            live_paths[lp_count]['count'] = dead_paths[dp]['count']
+            live_paths[lp_count]['lastfound'] = dead_paths[dp]['lastfound']
+            lp_count += 1
 
     live_paths = sort_paths(live_paths)
 
@@ -285,29 +299,35 @@ def incremental_linking(frames,iouth, gap):
 
 
 def doFilter(video_result,a,f,nms_thresh):
-    scores = video_result(f)['scores'][:,a]
-    pick = scores>0.001
-    scores = scores[pick]
-    boxes = video_result(f)['boxes'][pick,:]
-    allscores = video_result(f)['scores'][pick,:]
-    pick = torch.argsort(-scores)
-    topick = min(50,len(pick))
-    pick = pick[:topick]
-    scores = scores[pick]
-    boxes = boxes[pick,:]
-    allscores = allscores[pick,:]
-    pick,_ = nms(boxes, scores, args.nms_thresh, args.topk)
-    pick = pick[:min(10,len(pick))]
-    boxes = boxes[pick,:]
-    scores = scores[pick]
-    allscores = allscores[pick,:]
+    scores = video_result[f]['scores'][:,a].squeeze()
+    c_mask = scores.gt(args.conf_thresh)
+    scores = scores[c_mask].squeeze()
+    if scores.dim() == 0 or scores.shape[0] == 0:
+        return np.array([]),np.array([]),np.array([])
+    boxes = video_result[f]['boxes'].clone()
+    l_mask = c_mask.unsqueeze(1).expand_as(boxes)
+    boxes = boxes[l_mask].view(-1, 4)
+    a_mask = c_mask.unsqueeze(1).expand_as(video_result[f]['scores'])
+    allscores = video_result[f]['scores'][a_mask].view(-1,video_result[f]['scores'].shape[-1])
+    ids, counts = nms(boxes, scores, args.nms_thresh, args.topk)  # idsn - ids after nms
+    scores = scores[ids[:counts]]
+    boxes = boxes[ids[:counts]]
+    allscores = allscores[ids[:counts]]
+    height,width = args.cfg['min_dim']
+    boxes[:, 0] *= width
+    boxes[:, 2] *= width
+    boxes[:, 1] *= height
+    boxes[:, 3] *= height
     return boxes,scores,allscores
 
 
 def genActionPaths(video_result, a, nms_thresh, iouth,gap):
     action_frames = {}
     for f in range(len(video_result)):
+        # get decoded boxes of actual size
         boxes,scores,allscores = doFilter(video_result,a,f,nms_thresh)
+        # if len(boxes.shape)>1 and a==1:
+        #     print('filter',f,a,scores,boxes)
         action_frames[f] = {}
         action_frames[f]['boxes'] = boxes
         action_frames[f]['scores'] = scores
@@ -329,64 +349,70 @@ def actionPath(video_result):
     iouth = 0.1
     numActions = len(opt['actions'])
     nmsThresh = 0.45
-    allPath = []
-    for a in range(numActions):
-        allPath.append(genActionPaths(video_result, a, nms_thresh, iouth,gap))
+    allPath = {}
+    for a in range(1,numActions+1):
+        allPath[a] = genActionPaths(video_result, a, nmsThresh, iouth,gap)
     return allPath
 
+# construct a path that maximizes action socres
 def dpEM_max(M,alpha):
-    r,c = M.shape
+    # action score of all frames
+    r,c = M.shape # r numactions,c num frames
 
-    D = np.zeros(r,c+1)
+    D = np.zeros((r,c+1))
     D[:,0] = 0
-    D[:,1:] = M
+    D[:,1:] = M.cpu().numpy()
 
-    v = np.array([range(r)]).transpose(1,0)
+    v = np.array([range(r)])
 
-    phi = np.zeros(r,c)
+    phi = np.zeros((r,c))
 
     for j in range(1,c+1):
         for i in range(r):
-            tb = np.argmax(D[:,j-1]-alpha*(v!=i))
-            dmax = np.max(D[:,j-1]-alpha*(v!=i))
+            tmp = D[:,j-1]-alpha*(v!=i)
+            tb = np.argmax(tmp)
+            dmax = np.max(tmp)
             D[i,j] += dmax
             phi[i,j-1] = tb
 
-    D = D(:,1:)
+    D = D[:,1:]
 
-    q = c
-    p = np.argmax(D[:,-1])
+    q = [c-1]
+    p = [np.argmax(D[:,-1])]
 
-    i = p
-    j = q-1
-
+    i = p[-1]
+    j = q[-1]
+    
     while j>0:
         tb = phi[i,j]
         p = [tb] + p
         q = [j-1] + q
         j -= 1
-        i = tb
-    return p,q,D
+        i = int(tb)
+    return p,np.array(q),D
 
 def extract_action(p,q,D,action):
-    indexs = np.where(np.array(p) == action)
+    indexs = np.where(np.array(p) == action)[0]
 
     if len(indexs) == 0:
+        # no point on path is the specified action
         ts, te, scores, label, total_score = [],[],[],[],[]
     else:
-        indexs_diff = np.array(indexs+[indexs[-1]+1]) - np.array([indexs[0]-2]+indexs)
-        ts = np.where(indexs_diff > 1)
+        indexs_diff = np.concatenate((indexs,[indexs[-1]+1])) - np.concatenate(([indexs[0]-2],indexs))
+        # find where the adjacent action is different
+        ts = np.where(indexs_diff > 1)[0]
 
         if len(ts) > 1:
-            te = [ts[1:]-1,len(indexs)]
+            te = ts[1:]-1 + [len(indexs)-1]
         else:
-            te = len(indexs)
+            te = [len(indexs)-1]
 
         ts = indexs[ts]
         te = indexs[te]
+        # score of each tube
         scores = (D[action,q[te]] - D[action,q[ts]]) / (te - ts)
-        label = np.ones(len(ts),1) * action
-        total_score = np.ones(len(ts),1) * D(p[-1],q[-1]) / len(p)
+        label = [action for _ in range(len(ts))]
+        total_score = np.ones(len(ts)) * D[p[-1],q[-1]] / len(p)
     return ts,te,scores,label,total_score
 
 
@@ -404,16 +430,19 @@ def actionPathSmoother4oneVideo(video_paths,alpha,num_action):
     action_count = 0
 
     if len(video_paths) > 0:
-        for a in range(num_action):
+        for a in range(1,num_action+1):
             action_paths = video_paths[a]
             num_act_paths = getPathCount(action_paths)
             for p in range(num_act_paths):
-                M = action_paths[p]['allscores'][:,:num_action]
+                M = action_paths[p]['allscores'].transpose(1,0)
+                assert(len(M.shape) == 2)
                 M += 20
 
-                pred_path,time,D = dpEM_max(M,alpha[a])
+                # refine the path 
+                pred_path,time,D = dpEM_max(M,alpha)
                 Ts, Te, Scores, Label, DpPathScore = extract_action(pred_path,time,D,a)
 
+                # print("Num tubes for action",a,len(Ts))
                 for k in range(len(Ts)):
                     final_tubes['starts'][action_count] = action_paths[p]['start']
                     final_tubes['ts'][action_count] = Ts[k]
@@ -421,7 +450,7 @@ def actionPathSmoother4oneVideo(video_paths,alpha,num_action):
                     final_tubes['dpActionScore'][action_count] = Scores[k]
                     final_tubes['label'][action_count] = Label[k]
                     final_tubes['dpPathScore'][action_count] = DpPathScore[k]
-                    final_tubes['path_total_score'][action_count] = mean(action_paths[p]['scores'])
+                    final_tubes['path_total_score'][action_count] = torch.mean(action_paths[p]['scores'])
                     final_tubes['path_boxes'][action_count] = action_paths[p]['boxes']
                     final_tubes['path_scores'][action_count] = action_paths[p]['scores']
                     action_count += 1
@@ -429,42 +458,16 @@ def actionPathSmoother4oneVideo(video_paths,alpha,num_action):
 
 
 def actionPathSmoother(allPath,alpha,num_action):
-    # final_tubes = {}
-    # final_tubes['starts'] = {}
-    # final_tubes['ts'] = {}
-    # final_tubes['te'] = {}
-    # final_tubes['label'] = {}
-    # final_tubes['path_total_score'] = {}
-    # final_tubes['dpActionScore'] = {}
-    # final_tubes['dpPathScore'] = {}
-    # final_tubes['path_boxes'] = {}
-    # final_tubes['path_scores'] = {}
-
     final_tubes = actionPathSmoother4oneVideo(allPath,alpha,num_action)
-
-    # action_count = 0
-    # for k in range(len(alltubes.ts)):
-    #     final_tubes['starts'][action_count] = vid_tubes['starts'][k]
-    #     final_tubes['ts'][action_count] = vid_tubes['ts'][k]
-    #     final_tubes['te'][action_count] = vid_tubes['te'][k]
-    #     final_tubes['dpActionScore'][action_count] = vid_tubes['dpActionScore'][k]
-    #     final_tubes['label'][action_count] = vid_tubes['label'][k]
-    #     final_tubes['dpPathScore'][action_count] = vid_tubes['dpPathScore'][k]
-    #     final_tubes['path_total_score'][action_count] = vid_tubes['path_total_score'][k]
-    #     final_tubes['path_boxes'][action_count] = vid_tubes['path_boxes'][k]
-    #     final_tubes['path_scores'][action_count] = vid_tubes['path_score'][k]
-    #     action_count += 1
-
     return final_tubes
 
-def convert2eval(final_tubes,min_num_frames,kthresh,topk):
+def convert2eval(final_tubes,min_num_frames,topk):
     xmld = {}
     xmld['score'] = {}
     xmld['nr'] = {}
     xmld['class'] = {}
     xmld['framenr'] = {}
     xmld['boxes'] = {}
-
 
     action_score = final_tubes['dpActionScore']
     path_score = final_tubes['path_scores']
@@ -478,15 +481,13 @@ def convert2eval(final_tubes,min_num_frames,kthresh,topk):
     for a in range(len(ts)):
         act_ts = ts[a]
         act_te = te[a]
-        act_path_scores = path_scores[a]
+        act_path_scores = path_score[a]
 
-        act_scores = -sorted(-act_path_scores[act_ts:act_te+1])
+        act_scores,_ = torch.sort(act_path_scores[act_ts:act_te+1],descending=True)
 
-        topk_mean = mean(act_scores[:min(topk,len(act_scores))])
+        topk_mean = torch.mean(act_scores[:min(topk,len(act_scores))])
 
         bxs = final_tubes['path_boxes'][a][act_ts:act_te+1,:]
-
-        bxs = [bxs[:,:2],bxs[:,2:]-bxs[:,:2]]
 
         label = final_tubes['label'][a]
 
@@ -494,7 +495,7 @@ def convert2eval(final_tubes,min_num_frames,kthresh,topk):
             xmld['score'][act_nr] = topk_mean
             xmld['nr'][act_nr] = act_nr
             xmld['class'][act_nr] = label
-            xmld['framenr'][act_nr] = {'fnr':np.array(range(act_ts,act_te+1)) + starts[a] - 1}
+            xmld['framenr'][act_nr] = {'fnr':np.array(range(act_ts,act_te+1)) + starts[a]}
             xmld['boxes'][act_nr] = {'bxs':bxs}
             act_nr += 1
     return xmld
@@ -510,7 +511,7 @@ def sort_detection(dt_tubes):
     num_detection = len(dt_tubes['class'])
     if num_detection > 0:
         scores = dt_tubes['score']
-        indexes = np.argsort(-scores)
+        indexes = [k for k, _ in sorted(scores.items(), key=lambda item: -item[1])]
         for dt in range(num_detection):
             dtind = indexes[dt]
             sorted_tubes['framenr'][dt] = {'fnr':dt_tubes['framenr'][dtind]['fnr']}
@@ -523,19 +524,13 @@ def sort_detection(dt_tubes):
 def inters_union(bounds1,bounds2):
     box_a = torch.Tensor(bounds1)
     box_b = torch.Tensor(bounds2)
-    A = box_a.size(0)
-    B = box_b.size(0)
-    max_xy = torch.min(box_a[:, 2:4].unsqueeze(1).expand(A, B, 2),
-                       box_b[:, 2:4].unsqueeze(0).expand(A, B, 2))
-    min_xy = torch.max(box_a[:, :2].unsqueeze(1).expand(A, B, 2),
-                       box_b[:, :2].unsqueeze(0).expand(A, B, 2))
+    max_xy = torch.min(box_a[2:],box_b[2:])
+    min_xy = torch.max(box_a[:2],box_b[:2])
     inter = torch.clamp((max_xy - min_xy), min=0)
-    inter = inter[:, :, 0] * inter[:, :, 1]
+    inter = inter[0] * inter[1]
 
-    area_a = ((box_a[:, 2]-box_a[:, 0]) *
-              (box_a[:, 3]-box_a[:, 1])).unsqueeze(1).expand_as(inter)  # [A,B]
-    area_b = ((box_b[:, 2]-box_b[:, 0]) *
-              (box_b[:, 3]-box_b[:, 1])).unsqueeze(0).expand_as(inter)  # [A,B]
+    area_a = ((box_a[2]-box_a[0])*(box_a[3]-box_a[1]))
+    area_b = ((box_b[2]-box_b[0])*(box_b[3]-box_b[1]))
     union = area_a + area_b - inter
     return inter / union  # [A,B]
 
@@ -575,53 +570,48 @@ def compute_spatial_temporal_iou(gt_fnr,gt_bb,dt_fnr,dt_bb):
 
 
 def xVOCap(rec,prec):
-    mprec = np.array([0]+rec+[1])
-    mpre = np.array([0]+rec+[0])
-    for i in range(len(mprec)-2,-1,-1):
+    mrec = np.array([0]+rec+[1])
+    mpre = np.array([0]+prec+[0])
+    for i in range(len(mpre)-2,-1,-1):
         mpre[i] = max(mpre[i],mpre[i+1])
 
-    i = np.where(mrec[1:]!=mrec(:-1))+1
+    i = np.where(mrec[1:]!=mrec[:-1])[0]+1
     ap = np.sum((mrec[i]-mrec[i-1])*mpre[i])
     return ap
 
+# count of detected tubes per class
+cc = [0 for _ in range(24)]
+# result for each detected tube per class
+allscore = {}
+for a in range(24):
+    allscore[a] = np.zeros((10000,2))
+# num of gt tubes per class
+total_num_gt_tubes = [0 for _ in range(24)]
+# avg iou per class
+averageIoU = np.zeros(24)
+preds = []
+gts = []
+
 def get_PR_curve(annot, xmldata, iouth):
-    actions = ['Basketball','BasketballDunk','Biking','CliffDiving','CricketBowling',
-        'Diving','Fencing','FloorGymnastics','GolfSwing','HorseRiding','IceDancing',
-        'LongJump','PoleVault','RopeClimbing','SalsaSpin','SkateBoarding','Skiing',
-        'Skijet','SoccerJuggling','Surfing','TennisSwing','TrampolineJumping',
-        'VolleyballSpiking','WalkingWithDog']
-    numActions = len(actions)
-    AP = np.zeros(numActions)
-    averageIoU = np.zeros(numActions)
-
-    cc = zeros(num_actions)
-    allscore = {}
-    for a in range(numActions):
-        allscore[a] = np.zeros(10000,2)
-
-    total_num_gt_tubes = np.zeros(numActions)
-
-    preds = -1
-    gts = 0
+    numActions = 24
     maxscore = -10000
     annotName = annot[1][0]
-    print("Check video name again:",annotName)
-    action_id = int(annot[2][0][0][2])
-    print("Check action id=",action_id)
+    action_id = int(annot[2][0][0][2]) - 1
 
     gt_tubes = annot[2][0]
     dt_tubes = sort_detection(xmldata)
 
     num_detection = len(dt_tubes['class'])
     num_gt_tubes = len(gt_tubes)
-    print("num gt tubes=",num_gt_tubes)
 
     for gtind in range(num_gt_tubes):
-        action_id = gt_tubes[gtind][2]
-        assert(action_id == int(action_id))
+        action_id = gt_tubes[gtind][2][0][0]
+        assert(action_id > 0)
+        action_id -= 1
         total_num_gt_tubes[action_id] += 1
 
-    gts = action_id
+    pred = -1
+    gt = action_id
     dt_labels = dt_tubes['class']
     covered_gt_tubes = np.zeros(num_gt_tubes)
     for dtind in range(num_detection):
@@ -630,22 +620,23 @@ def get_PR_curve(annot, xmldata, iouth):
         # bounding boxes
         dt_bb = dt_tubes['boxes'][dtind]['bxs']
         # class label
-        dt_label = dt_labels[dtind]
+        dt_label = dt_labels[dtind] - 1
         # the tube having the max score decides
         # the label of the video
         if dt_tubes['score'][dtind] > maxscore:
-            preds = dt_label
+            pred = dt_label
             maxscore = dt_tubes['score'][dtind]
         # cc counts the number of detections per class
         cc[dt_label] += 1
+        assert(cc[dt_label]<10000)
 
         ioumax = -10000
         maxgtind = 0
         for gtind in range(num_gt_tubes):
-            action_id = gt_tubes[gtind][2]#class
+            action_id = gt_tubes[gtind][2] - 1#class
             # if this gt tube is not covered and has the same label as this detected tube
             if (not covered_gt_tubes[gtind]) and dt_label == action_id:
-                gt_fnr = range(gt_tubes[gtind][1],gt_tubes[gtind][0]+1)
+                gt_fnr = range(gt_tubes[gtind][1][0][0],gt_tubes[gtind][0][0][0]+1)
                 gt_bb = gt_tubes[gtind][3]
                 iou = compute_spatial_temporal_iou(gt_fnr,gt_bb,dt_fnr,dt_bb)
                 if iou > ioumax:
@@ -661,65 +652,81 @@ def get_PR_curve(annot, xmldata, iouth):
             averageIoU[dt_label] += ioumax
         else:
             allscore[dt_label][cc[dt_label],:] = [dt_tubes['score'][dtind],0]
+    preds.append(pred)
+    gts.append(gt)
+    return pred == gt
 
+def evaluate_tubes():
+    actions = ['Basketball','BasketballDunk','Biking','CliffDiving','CricketBowling',
+        'Diving','Fencing','FloorGymnastics','GolfSwing','HorseRiding','IceDancing',
+        'LongJump','PoleVault','RopeClimbing','SalsaSpin','SkateBoarding','Skiing',
+        'Skijet','SoccerJuggling','Surfing','TennisSwing','TrampolineJumping',
+        'VolleyballSpiking','WalkingWithDog']
+    numActions = 24
+    AP = np.zeros(numActions)
+    AIoU = np.zeros(numActions)
     # todo: need to store all detection info of all videos into allscore
     for a in range(numActions):
         allscore[a] = allscore[a][:cc[a],:]
         scores = allscore[a][:,0]
-        labels = allscore[a][:,1]
+        result = allscore[a][:,1]
         si = np.argsort(-scores)
-        labels = labels[si]
-        fp = np.cumsum(labels == 0)
-        tp = np.cumsum(labels == 1)
+        result = result[si]
+        fp = np.cumsum(result == 0)
+        tp = np.cumsum(result == 1)
         cdet = 0
         if len(tp) > 0:
             cdet = tp[-1]
-            averageIoU[a] = (averageIoU[a]+0.000001)/(tp[-1]+0.000001)
+            AIoU[a] = (averageIoU[a]+0.000001)/(cdet+0.000001) if cdet > 1 else averageIoU[a]
 
-        recall = tp/total_num_gt_tubes[a]
-        precision = tp/(fp+tp)
-        AP[a] = xVOCap(recall,precision)
-        print('Action %02d AP = %0.5f and AIOU %0.5f\
-             GT %03d total det %02d correct det %02d %s\n'\
-             .format(a, AP[a],averageIoU[a],
-            total_num_gt_tubes[a],len(tp),cdet,actions[a]))
+        if total_num_gt_tubes[a]>0:
+            recall = tp/total_num_gt_tubes[a]
+            precision = tp/(fp+tp)
+            AP[a] = xVOCap(recall,precision)
+        else:
+            AP[a] = 0
+        print('Action {:02d} AP = {:0.5f} and AIOU {:0.5f}\
+             GT {:03d} total det {:02d} correct det {:02d} {:s}\n'\
+             .format(a, AP[a],AIoU[a],total_num_gt_tubes[a],cc[a],cdet,actions[a]))
 
-    acc = (preds==gts)
-    mAP = np.max(AP)
-    mAIoU = np.max(averageIoU)
+    acc = np.mean(np.array(preds)==np.array(gts))
+    mAP = np.mean(AP)
+    mAIoU = np.mean(AIoU)
 
-    return mAP,mIoU,acc,AP
+    return mAP,mAIoU,acc,AP
 
 
 # smooth tubes and evaluate them
 def getTubes(allPath,video_id):
     # read all groundtruth actions
     final_annot_location = args.data_root + 'splitfiles/correctedAnnots_test.mat'
-    annot = sio.loadmat(final_annot_location)[0][video_id]
+    annot = sio.loadmat(final_annot_location)
+    annot = annot['annot'][0][video_id]
     # smooth action path
-    alphas = [3,5]
+    alpha = 3
     numActions = 24
-    for alpha in alphas:
-        smoothedtubes = actionPathSmoother(allPath,alpha*torch.ones(numActions,1),numActions)
+    smoothedtubes = actionPathSmoother(allPath,alpha,numActions)
 
-        min_num_frames = 8
-        topk = 40
+    min_num_frames = 8
+    topk = 40
 
-        xmldata = convert2eval(smoothedtubes, min_num_frames, topk)
+    xmldata = convert2eval(smoothedtubes, min_num_frames, topk)
 
-        # evaluate
-        iouths = [0.2] + [0.5 + 0.05*i for i in range(10)]
-        for iouth in iouths:
-            tmAP,tmIoU,tacc,AP = get_PR_curve(annot, xmldata, iouth)
-            print('%.2f %0.3f %0.3f %.2f\n'.format(iou_th,tmAP,tacc,AP))
+    # evaluate
+    # iouths = [0.2] + [0.5 + 0.05*i for i in range(10)]
+    iouth = 0.5
+    return get_PR_curve(annot, xmldata, iouth)
 
 def process_video_result(video_result):
     frame_det_res = video_result['data']
     videoname = video_result['videoname']
     video_id = video_result['video_id']
-    print("Processing:",videoname,'id=',video_id,"total frames:",len(video_result))
     allPath = actionPath(frame_det_res)
-    getTubes(allPath,video_id)
+    res = getTubes(allPath,video_id)
+    print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res),"result:",res)
+    if video_id>0 and video_id%100 == 0:
+        mAP,mAIoU,acc,AP = evaluate_tubes()
+        print('Mean AP {:0.2f} meanAIoU {:0.3f} accuracy {:0.3f}\n'.format(mAP,mAIoU,acc))
 
 
 def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_classes, thresh=0.5 ):
@@ -790,8 +797,8 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 # check if this id is different from the previous one
                 if (video_id != pre_video_id) and (len(video_result['data']) > 0):
                     # process this video
-                    video_result['videoname'] = videoname
-                    video_result['video_id'] = video_id
+                    video_result['videoname'] = video_list[pre_video_id]
+                    video_result['video_id'] = pre_video_id
                     process_video_result(video_result)
                     video_result['data'] = []
                 pre_video_id = video_id
@@ -803,7 +810,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 output_file_name = output_dir+'/{:05d}.mat'.format(int(frame_num))
                 res = {}
                 res['scores'] = conf_scores
-                res['decoded_boxes'] = decoded_boxes
+                res['boxes'] = decoded_boxes
                 video_result['data'].append(res)
                 # save_ids.append(output_file_name)
                 # sio.savemat(output_file_name, mdict=res)

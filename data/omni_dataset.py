@@ -192,7 +192,7 @@ class OmniDataset(data.Dataset):
 
         # load backgorounds
         self.bg_imgs = []
-        img_root = '/home/bo/research/realtime-action-detection/data/background/'
+        img_root = '/home/monet/research/realtime-action-detection/data/background/'
         for bg_idx in range(1,23):
             img_name = img_root + str(bg_idx) + '.jpg'
             bg_img = cv2.imread(img_name)
@@ -250,11 +250,11 @@ class OmniDataset(data.Dataset):
         #         for old,new in zip(old_label,label):
         #             old = (int(old[0]),int(old[1]),int(old[2]-old[0]),int(old[3]-old[1]))
         #             if sum(old) == 0:continue
-        #             self.annot_map[videoname][old] = [int(new[0]*1024),\
-        #                                                 int(new[1]*512),\
-        #                                                 int((new[2]-new[0])*1024),\
-        #                                                 int((new[3]-new[1])*512)]
-        #         if idx%1000 == 0:
+        #             self.annot_map[videoname][old] = [int(new[0]*1024),
+        #                                                 int(new[1]*512),
+        #                                                 int(new[2]*1024),
+        #                                                 int(new[3]*512)]
+        #         if idx%100 == 0:
         #             print('Transforming %6d/%6d'%(idx,len(dataset)))
 
         #     # transform the annotation
@@ -263,11 +263,15 @@ class OmniDataset(data.Dataset):
         #     for annot in old_annots['annot'][0]:
         #         filename = annot[1][0]
         #         if filename in self.annot_map:
-        #             old_boxes = annot[2][0][0][3]
-        #             for i,old_box in enumerate(old_boxes):
-        #                 key = (old_box[0],old_box[1],old_box[2],old_box[3])
-        #                 assert(key in self.annot_map[filename])
-        #                 old_boxes[i] = self.annot_map[filename][key]
+        #             for tube in annot[2][0]:
+        #                 new_boxes = []
+        #                 for i,old_box in enumerate(tube[3]):
+        #                     key = (old_box[0],old_box[1],old_box[2],old_box[3])
+        #                     assert(key in self.annot_map[filename])
+        #                     new_boxes.append(self.annot_map[filename][key])
+        #                 tube[3] = new_boxes
+        #         else:
+        #             print(filename)
         #     sio.savemat(self.final_annot_location,{'annot':old_annots['annot'][0]})
         #     print('transform finishes')
         #     exit(0)
