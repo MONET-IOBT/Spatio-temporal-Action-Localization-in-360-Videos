@@ -217,7 +217,7 @@ def main():
         # Load dataset
         dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, means), AnnotationTransform(), 
                             cfg=args.cfg, input_type=args.input_type, 
-                            outshape=args.outshape, full_test=False)
+                            outshape=args.outshape, full_test=True)
         # evaluation
         torch.cuda.synchronize()
         tt0 = time.perf_counter()
