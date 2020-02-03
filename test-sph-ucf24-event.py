@@ -44,8 +44,8 @@ parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to tra
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
-parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -300,7 +300,7 @@ def incremental_linking(frames,iouth, gap):
 
 def doFilter(video_result,a,f,nms_thresh):
     scores = video_result[f]['scores'][:,a].squeeze()
-    c_mask = scores.gt(args.conf_thresh)
+    c_mask = scores.gt(args.conf_thresh)#0.001?
     scores = scores[c_mask].squeeze()
     if scores.dim() == 0 or scores.shape[0] == 0:
         return np.array([]),np.array([]),np.array([])
@@ -393,6 +393,7 @@ def dpEM_max(M,alpha):
 
 def extract_action(p,q,D,action):
     indexs = np.where(np.array(p) == action)[0]
+    len_idx = len(indexs)
 
     if len(indexs) == 0:
         # no point on path is the specified action
@@ -403,7 +404,8 @@ def extract_action(p,q,D,action):
         ts = np.where(indexs_diff > 1)[0]
 
         if len(ts) > 1:
-            te = ts[1:]-1 + [len(indexs)-1]
+            te = ts[1:]-1
+            te.append(len(indexs)-1)
         else:
             te = [len(indexs)-1]
 
@@ -854,6 +856,10 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
         if (len(video_result['data']) > 0):
             # process this video
             process_video_result(video_result)
+    print('Evaluate tubes:')
+    mAP,mAIoU,acc,AP = evaluate_tubes()
+    print('Mean AP {:0.2f} meanAIoU {:0.3f} accuracy {:0.3f}\n'.format(mAP,mAIoU,acc))
+
     print('Evaluating detections for itration number ', iteration)
 
     #Save detection after NMS along with GT
