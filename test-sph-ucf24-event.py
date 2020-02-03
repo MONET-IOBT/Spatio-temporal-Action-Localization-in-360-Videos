@@ -668,10 +668,11 @@ def evaluate_tubes():
     AP = np.zeros(numActions)
     AIoU = np.zeros(numActions)
     # todo: need to store all detection info of all videos into allscore
+    tmpscore = {}
     for a in range(numActions):
-        allscore[a] = allscore[a][:cc[a],:]
-        scores = allscore[a][:,0]
-        result = allscore[a][:,1]
+        tmpscore[a] = allscore[a][:cc[a],:].copy()
+        scores = tmpscore[a][:,0]
+        result = tmpscore[a][:,1]
         si = np.argsort(-scores)
         result = result[si]
         fp = np.cumsum(result == 0)
