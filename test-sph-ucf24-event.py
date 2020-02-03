@@ -405,7 +405,7 @@ def extract_action(p,q,D,action):
 
         if len(ts) > 1:
             te = ts[1:]-1
-            te.append(len(indexs)-1)
+            te = np.concatenate((te,[len(indexs)-1]))
         else:
             te = [len(indexs)-1]
 
