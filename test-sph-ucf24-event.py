@@ -724,7 +724,7 @@ def getTubes(allPath,video_id):
 
     # evaluate
     # iouths = [0.2] + [0.5 + 0.05*i for i in range(10)]
-    iouth = 0.5
+    iouth = 0.2#0.5
     return get_PR_curve(annot, xmldata, iouth)
 
 def process_video_result(video_result,outfile):
