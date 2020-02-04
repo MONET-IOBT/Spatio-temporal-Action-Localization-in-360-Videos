@@ -808,7 +808,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                     # process this video
                     video_result['videoname'] = video_list[pre_video_id]
                     video_result['video_id'] = pre_video_id
-                    process_video_result(video_result)
+                    process_video_result(video_result,outfile)
                     video_result['data'] = []
                 pre_video_id = video_id
 
