@@ -887,7 +887,7 @@ def main():
     args.listid = '01' ## would be usefull in JHMDB-21
     print('Exp name', exp_name, args.listid)
     for iteration in [int(itr) for itr in args.eval_iter.split(',') if len(itr)>0]:
-        log_file = open(args.save_root + 'cache/' + exp_name + "/testing-{:d}-2.log".format(iteration), "w", 1)
+        log_file = open(args.save_root + 'cache/' + exp_name + "/testing-{:d}.log".format(iteration), "w", 1)
         log_file.write(exp_name + '\n')
         trained_model_path = args.save_root + 'cache/' + exp_name + '/ssd300_ucf24_' + repr(iteration) + '.pth'
         log_file.write(trained_model_path+'\n')
