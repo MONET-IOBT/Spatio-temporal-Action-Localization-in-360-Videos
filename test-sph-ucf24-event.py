@@ -658,7 +658,7 @@ def get_PR_curve(annot, xmldata, iouth):
     gts.append(gt)
     return pred == gt
 
-def evaluate_tubes():
+def evaluate_tubes(outfile):
     actions = ['Basketball','BasketballDunk','Biking','CliffDiving','CricketBowling',
         'Diving','Fencing','FloorGymnastics','GolfSwing','HorseRiding','IceDancing',
         'LongJump','PoleVault','RopeClimbing','SalsaSpin','SkateBoarding','Skiing',
@@ -688,13 +688,19 @@ def evaluate_tubes():
             AP[a] = xVOCap(recall,precision)
         else:
             AP[a] = 0
-        print('Action {:02d} AP = {:0.5f} and AIOU {:0.5f}\
+        ptr_str = 'Action {:02d} AP = {:0.5f} and AIOU {:0.5f}\
              GT {:03d} total det {:02d} correct det {:02d} {:s}\n'\
-             .format(a, AP[a],AIoU[a],total_num_gt_tubes[a],cc[a],cdet,actions[a]))
+             .format(a, AP[a],AIoU[a],total_num_gt_tubes[a],cc[a],cdet,actions[a])
+        print(ptr_str)
+        outfile.write(ptr_str)
 
     acc = np.mean(np.array(preds)==np.array(gts))
     mAP = np.mean(AP)
     mAIoU = np.mean(AIoU)
+
+    ptr_str = 'Mean AP {:0.2f} meanAIoU {:0.3f} accuracy {:0.3f}\n'.format(mAP,mAIoU,acc)
+    print(ptr_str)
+    outfile.write(ptr_str)
 
     return mAP,mAIoU,acc,AP
 
@@ -720,7 +726,7 @@ def getTubes(allPath,video_id):
     iouth = 0.5
     return get_PR_curve(annot, xmldata, iouth)
 
-def process_video_result(video_result):
+def process_video_result(video_result,outfile):
     frame_det_res = video_result['data']
     videoname = video_result['videoname']
     video_id = video_result['video_id']
@@ -728,11 +734,10 @@ def process_video_result(video_result):
     res = getTubes(allPath,video_id)
     print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res),"result:",res)
     if video_id>0 and video_id%100 == 0:
-        mAP,mAIoU,acc,AP = evaluate_tubes()
-        print('Mean AP {:0.2f} meanAIoU {:0.3f} accuracy {:0.3f}\n'.format(mAP,mAIoU,acc))
+        mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
 
-def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_classes, thresh=0.5 ):
+def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_classes, outfile, thresh=0.5 ):
     """ Test a SSD network on an Action image database. """
 
     val_data_loader = data.DataLoader(dataset, args.batch_size, num_workers=args.num_workers,
@@ -856,16 +861,15 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 print('NMS stuff Time {:0.3f}'.format(te - tf))
         if (len(video_result['data']) > 0):
             # process this video
-            process_video_result(video_result)
+            process_video_result(video_result,outfile)
     print('Evaluate tubes:')
-    mAP,mAIoU,acc,AP = evaluate_tubes()
-    print('Mean AP {:0.2f} meanAIoU {:0.3f} accuracy {:0.3f}\n'.format(mAP,mAIoU,acc))
+    mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
     print('Evaluating detections for itration number ', iteration)
 
-    #Save detection after NMS along with GT
-    with open(det_file, 'wb') as f:
-        pickle.dump([gt_boxes, det_boxes, save_ids], f, pickle.HIGHEST_PROTOCOL)
+    # #Save detection after NMS along with GT
+    # with open(det_file, 'wb') as f:
+    #     pickle.dump([gt_boxes, det_boxes, save_ids], f, pickle.HIGHEST_PROTOCOL)
 
     return evaluate_detections(gt_boxes, det_boxes, CLASSES, iou_thresh=thresh)
 
@@ -882,7 +886,7 @@ def main():
     args.listid = '01' ## would be usefull in JHMDB-21
     print('Exp name', exp_name, args.listid)
     for iteration in [int(itr) for itr in args.eval_iter.split(',') if len(itr)>0]:
-        log_file = open(args.save_root + 'cache/' + exp_name + "/testing-{:d}.log".format(iteration), "w", 1)
+        log_file = open(args.save_root + 'cache/' + exp_name + "/testing-{:d}-2.log".format(iteration), "w", 1)
         log_file.write(exp_name + '\n')
         trained_model_path = args.save_root + 'cache/' + exp_name + '/ssd300_ucf24_' + repr(iteration) + '.pth'
         log_file.write(trained_model_path+'\n')
@@ -908,7 +912,7 @@ def main():
         torch.cuda.synchronize()
         tt0 = time.perf_counter()
         log_file.write('Testing net \n')
-        mAP, ap_all, ap_strs = test_net(net, args.save_root, exp_name, args.input_type, dataset, iteration, num_classes)
+        mAP, ap_all, ap_strs = test_net(net, args.save_root, exp_name, args.input_type, dataset, iteration, num_classes, log_file)
         for ap_str in ap_strs:
             print(ap_str)
             log_file.write(ap_str + '\n')
