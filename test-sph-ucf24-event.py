@@ -571,16 +571,49 @@ def compute_spatial_temporal_iou(gt_fnr,gt_bb,dt_fnr,dt_bb):
         st_iou = 0
     return st_iou
 
+def voc_ap(rec, prec, use_07_metric=False):
+    """ ap = voc_ap(rec, prec, [use_07_metric])
+    Compute VOC AP given precision and recall.
+    If use_07_metric is true, uses the
+    VOC 07 11 point method (default:False).
+    """
+    # print('voc_ap() - use_07_metric:=' + str(use_07_metric))
+    if use_07_metric:
+        # 11 point metric
+        ap = 0.
+        for t in np.arange(0., 1.1, 0.1):
+            if np.sum(rec >= t) == 0:
+                p = 0
+            else:
+                p = np.max(prec[rec >= t])
+            ap = ap + p / 11.
+    else:
+        # correct AP calculation
+        # first append sentinel values at the end
+        mrec = np.concatenate(([0.], rec, [1.]))
+        mpre = np.concatenate(([0.], prec, [0.]))
 
-def xVOCap(rec,prec):
-    mrec = np.array([0]+rec+[1])
-    mpre = np.array([0]+prec+[0])
-    for i in range(len(mpre)-2,-1,-1):
-        mpre[i] = max(mpre[i],mpre[i+1])
+        # compute the precision envelope
+        for i in range(mpre.size - 1, 0, -1):
+            mpre[i - 1] = np.maximum(mpre[i - 1], mpre[i])
 
-    i = np.where(mrec[1:]!=mrec[:-1])[0]+1
-    ap = np.sum((mrec[i]-mrec[i-1])*mpre[i])
+        # to calculate area under PR curve, look for points
+        # where X axis (recall) changes value
+        i = np.where(mrec[1:] != mrec[:-1])[0]
+
+        # and sum (\Delta recall) * prec
+        ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
     return ap
+
+# def xVOCap(rec,prec):
+#     mrec = np.array([0]+rec+[1])
+#     mpre = np.array([0]+prec+[0])
+#     for i in range(len(mpre)-2,-1,-1):
+#         mpre[i] = max(mpre[i],mpre[i+1])
+
+#     i = np.where(mrec[1:]!=mrec[:-1])[0]+1
+#     ap = np.sum((mrec[i]-mrec[i-1])*mpre[i])
+#     return ap
 
 # count of detected tubes per class
 cc = [0 for _ in range(24)]
@@ -599,7 +632,7 @@ def get_PR_curve(annot, xmldata, iouth):
     numActions = 24
     maxscore = -10000
     annotName = annot[1][0]
-    action_id = int(annot[2][0][0][2]) - 1
+    action_id = annot[2][0][0][2] - 1
 
     gt_tubes = annot[2][0]
     dt_tubes = sort_detection(xmldata)
@@ -678,17 +711,16 @@ def evaluate_tubes(outfile):
         result = result[si]
         fp = np.cumsum(result == 0)
         tp = np.cumsum(result == 1)
+        fp = fp.astype(np.float64)
+        tp = tp.astype(np.float64)
         cdet = 0
         if len(tp) > 0:
             cdet = tp[-1]
             AIoU[a] = (averageIoU[a]+0.000001)/(cdet+0.000001) if cdet > 1 else averageIoU[a]
 
-        if total_num_gt_tubes[a]>0:
-            recall = tp/total_num_gt_tubes[a]
-            precision = tp/(fp+tp)
-            AP[a] = xVOCap(recall,precision)
-        else:
-            AP[a] = 0
+        recall = tp/float(total_num_gt_tubes[a]+1)
+        precision = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
+        AP[a] = voc_ap(recall,precision)
         ptr_str = 'Action {:02d} AP = {:0.5f} and AIOU {:0.5f}\
              GT {:03d} total det {:02d} correct det {:02d} {:s}\n'\
              .format(a, AP[a],AIoU[a],total_num_gt_tubes[a],cc[a],cdet,actions[a])
@@ -724,7 +756,7 @@ def getTubes(allPath,video_id):
 
     # evaluate
     # iouths = [0.2] + [0.5 + 0.05*i for i in range(10)]
-    iouth = 0.2#0.5
+    iouth = args.iou_thresh
     return get_PR_curve(annot, xmldata, iouth)
 
 def process_video_result(video_result,outfile):
@@ -887,7 +919,7 @@ def main():
     args.listid = '01' ## would be usefull in JHMDB-21
     print('Exp name', exp_name, args.listid)
     for iteration in [int(itr) for itr in args.eval_iter.split(',') if len(itr)>0]:
-        log_file = open(args.save_root + 'cache/' + exp_name + "/testing-{:d}.log".format(iteration), "w", 1)
+        log_file = open(args.save_root + 'cache/' + exp_name + "/testing-{:d}-{:0.2f}.log".format(iteration,args.iou_thresh), "w", 1)
         log_file.write(exp_name + '\n')
         trained_model_path = args.save_root + 'cache/' + exp_name + '/ssd300_ucf24_' + repr(iteration) + '.pth'
         log_file.write(trained_model_path+'\n')
