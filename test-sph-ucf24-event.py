@@ -715,7 +715,7 @@ def evaluate_tubes(outfile):
         tp = tp.astype(np.float64)
         cdet = 0
         if len(tp) > 0:
-            cdet = tp[-1]
+            cdet = int(tp[-1])
             AIoU[a] = (averageIoU[a]+0.000001)/(cdet+0.000001) if cdet > 1 else averageIoU[a]
 
         recall = tp/float(total_num_gt_tubes[a]+1)
