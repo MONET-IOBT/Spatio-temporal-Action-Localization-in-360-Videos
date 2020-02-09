@@ -33,7 +33,7 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='v2', help='conv11_2(v2) or pool6(v1) as last layer')
+parser.add_argument('--version', default='v1', help='conv11_2(v2) or pool6(v1) as last layer')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=300, type=int, help='Input Size for SSD') # only support 300 now

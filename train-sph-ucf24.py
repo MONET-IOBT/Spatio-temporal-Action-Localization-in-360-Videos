@@ -49,33 +49,34 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='6', help='The version of config')
+parser.add_argument('--version', default='1', help='The version of config')
 # parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=32, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--max_epoch', default=6, type=int, help='Number of training epochs')
 parser.add_argument('--man_seed', default=123, type=int, help='manualseed for reproduction')
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
-parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, help='initial learning rate')
+parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--stepvalues', default='30000,60000,100000', type=str, help='iter numbers where learing rate to be dropped')
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
 parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom Server')
-parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
 parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or ktn')
+parser.add_argument('--data_type', default='2d', help='2d or 3d')
 
 ## Parse arguments
 args = parser.parse_args()
@@ -104,7 +105,7 @@ def main():
     args.print_step = 10
 
     ## Define the experiment Name will used to same directory and ENV for visdom
-    args.exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}-{}'.format(args.net_type, args.dataset,
+    args.exp_name = '{}-SSD-{}-{}-{}-bs-{}-{}-lr-{:05d}-{}'.format(args.net_type, args.data_type, args.dataset,
                 args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000), args.cfg['name'])
 
     args.save_root += args.dataset+'/'
@@ -197,10 +198,19 @@ def train(args, net, optimizer, criterion, scheduler):
     cls_losses = AverageMeter()
 
     print('Loading Dataset...')
-    train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means), AnnotationTransform(), 
-                            cfg=args.cfg, input_type=args.input_type, outshape=args.outshape)
-    val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
-                            cfg=args.cfg, input_type=args.input_type, outshape=args.outshape)
+    if args.data_type == '2d':
+        train_dataset = UCF24Detection(args.data_root, args.train_sets, SSDAugmentation(300, args.means),
+                                   AnnotationTransform(), input_type=args.input_type)
+        val_dataset = UCF24Detection(args.data_root, 'test', BaseTransform(300, args.means),
+                                     AnnotationTransform(), input_type=args.input_type,
+                                     full_test=False)
+    elif args.data_type == '3d':
+        train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means), AnnotationTransform(), 
+                                cfg=args.cfg, input_type=args.input_type, outshape=args.outshape)
+        val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
+                                cfg=args.cfg, input_type=args.input_type, outshape=args.outshape)
+    else:
+        exit(0)
     
     print('Training SSD on', train_dataset.name)
 
