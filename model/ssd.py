@@ -12,7 +12,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import v2
+from layers.functions.prior_box import PriorBox
+from data import v1
 import os
 
 
@@ -37,7 +38,7 @@ class SSD(nn.Module):
 
         self.num_classes = num_classes
         # TODO: implement __call__ in PriorBox
-        self.priorbox = PriorBox(v2)
+        self.priorbox = PriorBox(v1)
         with torch.no_grad():
             self.priors = self.priorbox.forward().cuda()
             self.num_priors = self.priors.size(0)
