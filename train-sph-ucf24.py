@@ -19,13 +19,14 @@ import argparse
 import torch.utils.data as data
 from data.omni_dataset import OmniUCF24, sph_detection_collate
 from data import AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
-from data import v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13
+from data import v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14
 from utils.augmentations import SSDAugmentation
 # from layers.modules import MultiBoxLoss
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
 # from model.ssd import build_ssd
 from model.sph_ssd import build_vgg_ssd
 from model.fpnssd.net import FPNSSD512
+from model.fpnssd_cube.net import FPNSSD512CUBE
 from model.vggssd.net import SSD512
 from model.mobile_ssd_v1.net import MobileSSD512
 from model.mobile_ssd_v2.net import MobileSSDLite300V2
@@ -49,13 +50,13 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='1', help='The version of config')
+parser.add_argument('--version', default='14', help='The version of config')
 # parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=32, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--max_epoch', default=6, type=int, help='Number of training epochs')
@@ -76,7 +77,7 @@ parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence 
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
 parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or ktn')
-parser.add_argument('--data_type', default='2d', help='2d or 3d')
+parser.add_argument('--data_type', default='3d', help='2d or 3d')
 
 ## Parse arguments
 args = parser.parse_args()
@@ -91,7 +92,7 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 
 def main():
-    all_versions = [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13]
+    all_versions = [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14]
     args.cfg = all_versions[int(args.version)-1]
     args.basenet = args.cfg['base'] + '_reducedfc.pth'
     args.outshape = args.cfg['min_dim']
@@ -124,8 +125,10 @@ def main():
             m.bias.data.zero_()
 
     if args.cfg['base'] == 'fpn':
-        assert(args.ssd_dim == 512)
-        net = FPNSSD512(args.num_classes, args.cfg)
+        if args.cfg['name'] == 'fpn_cube':
+            net = FPNSSD512CUBE(args.num_classes, args.cfg)
+        else:
+            net = FPNSSD512(args.num_classes, args.cfg)
     elif args.cfg['base'] == 'vgg16':
         if args.cfg['min_dim'][0] == 512:
             net = SSD512(args.num_classes, args.cfg)

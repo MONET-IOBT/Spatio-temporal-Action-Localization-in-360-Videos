@@ -234,6 +234,7 @@ class OmniDataset(data.Dataset):
             self.vid2rot[vid] = (rot_x,rot_y,rot_z)
 
         # if self.dataset.image_set == 'test':
+            # data_type = '2d'
         #     print('transforming annotation')
         #     assert(os.path.exists(self.original_annot_location))
         #     import collections
@@ -248,12 +249,15 @@ class OmniDataset(data.Dataset):
         #         label = self._get_label(self.dataset[idx][1], *self.vid2rot[video_id])
         #         old_label = self.ids[idx][3]
         #         for old,new in zip(old_label,label):
-        #             old = (int(old[0]),int(old[1]),int(old[2]-old[0]),int(old[3]-old[1]))
-        #             if sum(old) == 0:continue
-        #             self.annot_map[videoname][old] = [int(new[0]*1024),
-        #                                                 int(new[1]*512),
-        #                                                 int(new[2]*1024),
-        #                                                 int(new[3]*512)]
+                    # old2 = (int(old[0]),int(old[1]),int(old[2]-old[0]),int(old[3]-old[1]))
+                    # if sum(old2) == 0:continue
+                    # if data_type == '2d':
+                    #     self.annot_map[videoname][old2] = old
+                    # else:
+                    #     self.annot_map[videoname][old2] = [int(new[0]*1024),
+                    #                                         int(new[1]*512),
+                    #                                         int(new[2]*1024),
+                    #                                         int(new[3]*512)]
         #         if idx%100 == 0:
         #             print('Transforming %6d/%6d'%(idx,len(dataset)))
 

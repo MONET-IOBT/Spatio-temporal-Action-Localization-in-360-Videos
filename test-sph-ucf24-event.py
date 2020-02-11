@@ -51,7 +51,7 @@ parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence 
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
 parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or ktn')
-
+parser.add_argument('--data_type', default='2d', help='2d or 3d')
 
 args = parser.parse_args()
 all_versions = [v1,v2,v3,v4,v5,v6]
@@ -741,7 +741,10 @@ def evaluate_tubes(outfile):
 # smooth tubes and evaluate them
 def getTubes(allPath,video_id):
     # read all groundtruth actions
-    final_annot_location = args.data_root + 'splitfiles/correctedAnnots_test.mat'
+    if args.data_type == '2d':
+        final_annot_location = args.data_root + 'splitfiles/correctedAnnots_test_2d.mat'
+    else:
+        final_annot_location = args.data_root + 'splitfiles/correctedAnnots_test.mat'
     annot = sio.loadmat(final_annot_location)
     annot = annot['annot'][0][video_id]
     # smooth action path
@@ -911,7 +914,10 @@ def main():
 
     means = (104, 117, 123)  # only support voc now
 
-    exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}-{}'.format(args.net_type, args.dataset,
+    # exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}-{}'.format(args.net_type, args.dataset,
+    #             args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000), args.cfg['name'])
+
+    exp_name = '{}-SSD-{}-{}-{}-bs-{}-{}-lr-{:05d}-{}'.format(args.net_type, args.data_type, args.dataset,
                 args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000), args.cfg['name'])
 
     args.save_root += args.dataset+'/'
@@ -938,9 +944,18 @@ def main():
             cudnn.benchmark = True
         print('Finished loading model %d !' % iteration)
         # Load dataset
-        dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, means), AnnotationTransform(), 
-                            cfg=args.cfg, input_type=args.input_type, 
-                            outshape=args.outshape, full_test=True)
+        # dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, means), AnnotationTransform(), 
+        #                     cfg=args.cfg, input_type=args.input_type, 
+        #                     outshape=args.outshape, full_test=True)
+        if args.data_type == '2d':
+            dataset = UCF24Detection(args.data_root, 'test', BaseTransform(300, args.means),
+                                         AnnotationTransform(), input_type=args.input_type,
+                                         full_test=True)
+        elif args.data_type == '3d':
+            dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
+                                    cfg=args.cfg, input_type=args.input_type, outshape=args.outshape, full_test=True)
+        else:
+            exit(0)
         # evaluation
         torch.cuda.synchronize()
         tt0 = time.perf_counter()
