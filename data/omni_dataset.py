@@ -188,6 +188,7 @@ class OmniDataset(data.Dataset):
         # load backgorounds
         self.bg_imgs = []
         img_root = self.dataset.root[:9] + 'research/realtime-action-detection/data/background/'
+        print(img_root)
         for bg_idx in range(1,23):
             img_name = img_root + str(bg_idx) + '.jpg'
             bg_img = cv2.imread(img_name)
