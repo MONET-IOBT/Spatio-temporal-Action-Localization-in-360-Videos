@@ -152,7 +152,7 @@ def uv2img_idx(uv, h, w, u_fov, v_fov, rot_x=0, rot_y=0, rot_z=0):
 
 
 class OmniDataset(data.Dataset):
-    def __init__(self, dataset, cfg=None, fov=120, outshape=(512, 2*512),
+    def __init__(self, dataset, fov=120, outshape=(512, 2*512),
                  z_rotate=True, y_rotate=True, x_rotate=False,
                  fix_aug=False, use_background=True, num_bgs=22, save_final_annot=True):
         '''
@@ -160,7 +160,6 @@ class OmniDataset(data.Dataset):
         @dataset  dataset with same interface as torch.utils.data.Dataset
                   yield (PIL image, label) if indexing
         '''
-        assert(cfg is not None)
         self.dataset = dataset
         self.ids = dataset.ids
         self.video_list = dataset.video_list
@@ -169,15 +168,11 @@ class OmniDataset(data.Dataset):
         self.z_rotate = z_rotate
         self.y_rotate = y_rotate
         self.x_rotate = x_rotate
-        self.cfg = cfg
         self.name = dataset.name
         self.use_background = use_background
         self.video_list = dataset.video_list
         self.ids = dataset.ids
         self.root = dataset.root
-        self.final_dataset_location = self.root + 'cache/final_dataset_' + self.dataset.image_set + '.npy'
-        self.original_annot_location = self.root +'splitfiles/finalAnnots.mat'
-        self.final_annot_location = self.root + 'splitfiles/correctedAnnots_' + self.dataset.image_set + '.mat'
 
         self.aug = None
         if fix_aug:
@@ -192,7 +187,7 @@ class OmniDataset(data.Dataset):
 
         # load backgorounds
         self.bg_imgs = []
-        img_root = '/home/monet/research/realtime-action-detection/data/background/'
+        img_root = self.dataset.root[:9] + 'research/realtime-action-detection/data/background/'
         for bg_idx in range(1,23):
             img_name = img_root + str(bg_idx) + '.jpg'
             bg_img = cv2.imread(img_name)
@@ -232,6 +227,11 @@ class OmniDataset(data.Dataset):
                 rot_x = 0
 
             self.vid2rot[vid] = (rot_x,rot_y,rot_z)
+
+
+        # self.final_dataset_location = self.root + 'cache/final_dataset_' + self.dataset.image_set + '.npy'
+        # self.original_annot_location = self.root +'splitfiles/finalAnnots.mat'
+        # self.final_annot_location = self.root + 'splitfiles/correctedAnnots_' + self.dataset.image_set + '.mat'
 
         # if self.dataset.image_set == 'test':
             # data_type = '2d'
@@ -380,7 +380,7 @@ class OmniDataset(data.Dataset):
         return torch.FloatTensor(x.copy())
 
 
-from data import UCF24Detection, AnnotationTransform, BaseTransform
+from data import UCF24Detection, AnnotationTransform, BaseTransform, JHMDB
 
 class OmniUCF24(OmniDataset):
     def __init__(self, root, image_set, transform=None, target_transform=None,
@@ -389,23 +389,10 @@ class OmniUCF24(OmniDataset):
                                     dataset_name, input_type, full_test)
         super(OmniUCF24, self).__init__(self.UCF24, *args, **kwargs)
 
-def sph_detection_collate(batch):
-    """Custom collate fn for dealing with batches of images that have a different
-    number of associated object annotations (bounding boxes).
-    Arguments:
-        batch: (tuple) A tuple of tensor images and lists of annotations
-    Return:
-        A tuple containing:
-            1) (tensor) batch of images stacked on their 0 dim
-            2) (list of tensors) annotations for a given image are stacked on 0 dim
-    """
-
-    targets = []
-    imgs = []
-    for sample in batch:
-        imgs.append(sample[0])
-        targets.append(torch.FloatTensor(sample[1]))
-    return torch.stack(imgs, 0), targets
+class OmniJHMDB(OmniDataset):
+    def __init__(self, root, image_set, transform=None, target_transform=None, *args, **kwargs):
+        self.JHMDB = JHMDB(root, image_set, transform, target_transform, split=1)
+        super(OmniJHMDB, self).__init__(self.JHMDB, *args, **kwargs)
 
 if __name__ == '__main__':
 
@@ -418,8 +405,8 @@ if __name__ == '__main__':
                         help='image indices to demo')
     parser.add_argument('--out_dir', default='output/demo',
                         help='directory to output demo image')
-    parser.add_argument('--dataset', default='OmniUCF24',
-                        choices=['OmniUCF24'],
+    parser.add_argument('--dataset', default='OmniJHMDB',
+                        choices=['OmniUCF24','OmniJHMDB'],
                         help='which dataset to use')
 
     parser.add_argument('--fov', type=int, default=120,
@@ -441,15 +428,19 @@ if __name__ == '__main__':
 
     os.makedirs(args.out_dir, exist_ok=True)
 
-
-    args.data_root = '/home/bo/research/dataset/ucf24/'
     args.train_sets = 'train'
     args.means = (104, 117, 123)
     np.random.seed(111)
 
     if args.dataset == 'OmniUCF24':
+        args.data_root = '/home/bo/research/dataset/ucf24/'
         dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means),
-                           AnnotationTransform(), cfg=v6, input_type=args.input_type, full_test=True)
+                           AnnotationTransform(), input_type=args.input_type, full_test=True)
+    elif args.dataset == 'OmniJHMDB':
+        args.data_root = '/home/bo/research/dataset/jhmdb/'
+        dataset = OmniJHMDB(args.data_root, 'test', BaseTransform(300, None),
+                           AnnotationTransform())
+
     else:
         exit(0)
 

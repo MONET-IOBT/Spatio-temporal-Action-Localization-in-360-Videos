@@ -17,8 +17,8 @@ import torch.optim as optim
 import torch.nn.init as init
 import argparse
 import torch.utils.data as data
-from data.omni_dataset import OmniUCF24, sph_detection_collate
-from data import AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
+from data.omni_dataset import OmniUCF24,OmniJHMDB
+from data import AnnotationTransform, UCF24_CLASSES, JHMDB_CLASSES, BaseTransform, UCF24Detection, detection_collate
 from data import v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14
 from utils.augmentations import SSDAugmentation
 # from layers.modules import MultiBoxLoss
@@ -52,7 +52,7 @@ def str2bool(v):
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
 parser.add_argument('--version', default='14', help='The version of config')
 # parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
-parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
+parser.add_argument('--dataset', default='jhmdb', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
@@ -98,6 +98,7 @@ def main():
     args.outshape = args.cfg['min_dim']
     args.train_sets = 'train'
     args.means = (104, 117, 123)
+    CLASSES = UCF24_CLASSES if args.dataset == 'ucf24' else JHMDB_CLASSES
     num_classes = len(CLASSES) + 1
     args.num_classes = num_classes
     args.stepvalues = [int(val) for val in args.stepvalues.split(',')]
@@ -202,16 +203,28 @@ def train(args, net, optimizer, criterion, scheduler):
 
     print('Loading Dataset...')
     if args.data_type == '2d':
-        train_dataset = UCF24Detection(args.data_root, args.train_sets, SSDAugmentation(300, args.means),
-                                   AnnotationTransform(), input_type=args.input_type)
-        val_dataset = UCF24Detection(args.data_root, 'test', BaseTransform(300, args.means),
-                                     AnnotationTransform(), input_type=args.input_type,
-                                     full_test=False)
+        if args.dataset == 'ucf24':
+            train_dataset = UCF24Detection(args.data_root, args.train_sets, SSDAugmentation(300, args.means),
+                                       AnnotationTransform(), input_type=args.input_type)
+            val_dataset = UCF24Detection(args.data_root, 'test', BaseTransform(300, args.means),
+                                         AnnotationTransform(), input_type=args.input_type,
+                                         full_test=False)
+        else:
+            train_dataset = JHMDB(args.data_root, args.train_sets, SSDAugmentation(300, None), 
+                                    AnnotationTransform(), split=1)
+            val_dataset = JHMDB(args.data_root, 'test', BaseTransform(300, None), 
+                                    AnnotationTransform(), split=1)
     elif args.data_type == '3d':
-        train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means), AnnotationTransform(), 
-                                cfg=args.cfg, input_type=args.input_type, outshape=args.outshape)
-        val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
-                                cfg=args.cfg, input_type=args.input_type, outshape=args.outshape)
+        if args.dataset == 'ucf24':
+            train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means), AnnotationTransform(), 
+                                    input_type=args.input_type, outshape=args.outshape)
+            val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
+                                    input_type=args.input_type, outshape=args.outshape)
+        else:
+            train_dataset = OmniJHMDB(args.data_root, args.train_sets, SSDAugmentation(300, None), AnnotationTransform(), 
+                                    outshape=args.outshape)
+            val_dataset = OmniJHMDB(args.data_root, 'test', BaseTransform(300, None), AnnotationTransform(), 
+                                    outshape=args.outshape)
     else:
         exit(0)
     
