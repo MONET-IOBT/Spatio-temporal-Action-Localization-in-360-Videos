@@ -14,7 +14,7 @@ from functools import lru_cache
 import os
 
 import sys
-sys.path.insert(0, '/home/bo/research/realtime-action-detection')
+sys.path.insert(0, '/home/monet/research/realtime-action-detection')
 from utils.augmentations import SSDAugmentation
 from data import v6
 
