@@ -19,7 +19,7 @@ import argparse
 import torch.utils.data as data
 from data.omni_dataset import OmniUCF24,OmniJHMDB
 from data import AnnotationTransform, UCF24_CLASSES, JHMDB_CLASSES, BaseTransform, UCF24Detection, detection_collate
-from data import v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14
+from data import v1,v2,v3,v4,v5,v6
 from utils.augmentations import SSDAugmentation
 # from layers.modules import MultiBoxLoss
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
@@ -92,7 +92,7 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 
 def main():
-    all_versions = [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14]
+    all_versions = [v1,v2,v3,v4,v5,v6]
     args.cfg = all_versions[int(args.version)-1]
     args.basenet = args.cfg['base'] + '_reducedfc.pth'
     args.outshape = args.cfg['min_dim']
@@ -326,6 +326,7 @@ def validate(args, net, val_data_loader, val_dataset, iteration_num, iou_thresh=
     """Test a SSD network on an image database."""
     print('Validating at ', iteration_num)
     num_images = len(val_dataset)
+    CLASSES = UCF24_CLASSES if args.dataset == 'ucf24' else JHMDB_CLASSES
     num_classes = args.num_classes
 
     det_boxes = [[] for _ in range(len(CLASSES))]

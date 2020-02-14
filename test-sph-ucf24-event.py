@@ -631,7 +631,7 @@ gts = []
 def get_PR_curve(annot, xmldata, iouth):
     numActions = 24
     maxscore = -10000
-    annotName = annot[1][0]
+    # annotName = annot[1][0]
     action_id = annot[2][0][0][2] - 1
 
     gt_tubes = annot[2][0]
@@ -747,6 +747,7 @@ def getTubes(allPath,video_id):
         final_annot_location = args.data_root + 'splitfiles/correctedAnnots_test.mat'
     annot = sio.loadmat(final_annot_location)
     annot = annot['annot'][0][video_id]
+    # need to load annot of jhmdb
     # smooth action path
     alpha = 3
     numActions = 24
