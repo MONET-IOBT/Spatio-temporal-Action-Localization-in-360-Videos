@@ -125,10 +125,9 @@ def main():
             m.bias.data.zero_()
 
     if args.cfg['base'] == 'fpn':
-        if args.cfg['name'].find('fpn_cube'):
-            net = FPNSSD512CUBE(args.num_classes, args.cfg)
-        else:
-            net = FPNSSD512(args.num_classes, args.cfg)
+        net = FPNSSD512(args.num_classes, args.cfg)
+    elif args.cfg['base'] == 'fpn_cube':
+        net = FPNSSD512CUBE(args.num_classes, args.cfg)
     elif args.cfg['base'] == 'vgg16':
         if args.cfg['min_dim'][0] == 512:
             net = SSD512(args.num_classes, args.cfg)
@@ -138,11 +137,9 @@ def main():
             net = build_vgg_ssd(args.num_classes, args.cfg)
             net.loc.apply(weights_init)
             net.conf.apply(weights_init)
-    elif args.cfg['base'] == 'mobile_v1_512':
+    elif args.cfg['base'] == 'mobile_vgg':
         net = MobileSSD512(args.num_classes, args.cfg)
-    elif args.cfg['base'] == 'mobile_v2_300_lite':
-        net = MobileSSDLite300V2(args.num_classes, args.cfg)
-    elif args.cfg['base'] == 'fpn_mobile_512':
+    elif args.cfg['base'] == 'fpn_mobile':
         net = MobileFPNSSD512(args.num_classes, args.cfg)
     elif args.cfg['base'] == 'yolov3':
         net = Darknet('model/yolov3/cfg/yolov3-spp.cfg', arc='CE')

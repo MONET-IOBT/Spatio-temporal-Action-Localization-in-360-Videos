@@ -25,7 +25,7 @@ v6 = {
 
     'name' : 'fpn_cube_512x1024',
 
-    'base' : 'fpn',
+    'base' : 'fpn_cube',
 }
 
 v5 = {
@@ -69,7 +69,7 @@ v4 = {
 
     'name' : 'fpn_mobile_512x1024',
 
-    'base' : 'fpn_mobile_512',
+    'base' : 'fpn_mobile',
 }
 
 v3 = {
@@ -91,7 +91,7 @@ v3 = {
 
     'name' : 'mobile_vgg_512x1024',
 
-    'base' : 'mobile_vgg_512',
+    'base' : 'mobile_vgg',
 }
 
 v2 = {
