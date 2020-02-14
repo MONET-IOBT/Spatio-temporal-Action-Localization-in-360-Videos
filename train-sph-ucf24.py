@@ -125,7 +125,7 @@ def main():
             m.bias.data.zero_()
 
     if args.cfg['base'] == 'fpn':
-        if args.cfg['name'] == 'fpn_cube':
+        if args.cfg['name'].find('fpn_cube'):
             net = FPNSSD512CUBE(args.num_classes, args.cfg)
         else:
             net = FPNSSD512(args.num_classes, args.cfg)
