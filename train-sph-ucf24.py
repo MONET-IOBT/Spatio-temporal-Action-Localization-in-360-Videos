@@ -29,7 +29,6 @@ from model.fpnssd.net import FPNSSD512
 from model.fpnssd_cube.net import FPNSSD512CUBE
 from model.vggssd.net import SSD512
 from model.mobile_ssd_v1.net import MobileSSD512
-from model.mobile_ssd_v2.net import MobileSSDLite300V2
 from model.mobile_fpnssd.net import MobileFPNSSD512
 # yolov3 stuff
 import model.yolov3.test as test
