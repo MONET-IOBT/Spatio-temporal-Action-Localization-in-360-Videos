@@ -605,16 +605,6 @@ def voc_ap(rec, prec, use_07_metric=False):
         ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
     return ap
 
-# def xVOCap(rec,prec):
-#     mrec = np.array([0]+rec+[1])
-#     mpre = np.array([0]+prec+[0])
-#     for i in range(len(mpre)-2,-1,-1):
-#         mpre[i] = max(mpre[i],mpre[i+1])
-
-#     i = np.where(mrec[1:]!=mrec[:-1])[0]+1
-#     ap = np.sum((mrec[i]-mrec[i-1])*mpre[i])
-#     return ap
-
 # count of detected tubes per class
 cc = [0 for _ in range(24)]
 # result for each detected tube per class

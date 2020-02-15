@@ -14,7 +14,7 @@ from functools import lru_cache
 import os
 
 import sys
-sys.path.insert(0, '/home/monet/research/realtime-action-detection')
+sys.path.insert(0, '/home/bo/research/realtime-action-detection')
 from utils.augmentations import SSDAugmentation
 from data import v6
 
@@ -435,15 +435,16 @@ if __name__ == '__main__':
 
     if args.dataset == 'OmniUCF24':
         args.data_root = '/home/bo/research/dataset/ucf24/'
-        dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means),
-                           AnnotationTransform(), input_type=args.input_type, full_test=True)
+        dataset = OmniUCF24(args.data_root, 'train', BaseTransform(300, args.means),
+                           AnnotationTransform(), input_type=args.input_type, full_test=False)
     elif args.dataset == 'OmniJHMDB':
-        args.data_root = '/home/monet/research/dataset/jhmdb/'
+        args.data_root = '/home/bo/research/dataset/jhmdb/'
         dataset = OmniJHMDB(args.data_root, 'test', BaseTransform(300, None),
                            AnnotationTransform())
-
     else:
         exit(0)
+
+    print(len(dataset))
 
     for idx in args.idx:
         idx = int(idx)

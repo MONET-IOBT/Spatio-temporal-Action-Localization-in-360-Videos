@@ -246,6 +246,14 @@ class JHMDB(torch.utils.data.Dataset):
             sum_frame)
     return sum_frame
 
-# if __name__ == '__main__':
-#   d = jhmdb('/home/bo/research/dataset/jhmdb', 'train', [240, 320], BaseTransformNoMean(300), AnnotationTransform(), split=1)
-#   print(d[5])
+if __name__ == '__main__':
+  from data import UCF24Detection, AnnotationTransform, BaseTransform, JHMDB
+  from PIL import Image
+  data_root = '/home/bo/research/dataset/jhmdb/'
+  dataset = JHMDB(data_root, 'test', BaseTransform(300, None),AnnotationTransform())
+  path = os.path.join('output/demo', '%d.png' % 0)
+  x, label, _ = dataset[1000]
+
+  print(path, label)
+  img = Image.fromarray(x.permute(1, 2, 0).numpy().astype(np.uint8))
+  img.save(path)

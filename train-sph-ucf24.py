@@ -18,7 +18,7 @@ import torch.nn.init as init
 import argparse
 import torch.utils.data as data
 from data.omni_dataset import OmniUCF24,OmniJHMDB
-from data import AnnotationTransform, UCF24_CLASSES, JHMDB_CLASSES, BaseTransform, UCF24Detection, detection_collate
+from data import AnnotationTransform, UCF24_CLASSES, JHMDB_CLASSES, BaseTransform, UCF24Detection, JHMDB, detection_collate
 from data import v1,v2,v3,v4,v5,v6
 from utils.augmentations import SSDAugmentation
 # from layers.modules import MultiBoxLoss
@@ -49,7 +49,7 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='6', help='The version of config')
+parser.add_argument('--version', default='2', help='The version of config')
 # parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='jhmdb', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
