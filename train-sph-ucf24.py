@@ -49,7 +49,7 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='2', help='The version of config')
+parser.add_argument('--version', default='6', help='The version of config')
 # parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='jhmdb', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
@@ -217,11 +217,10 @@ def train(args, net, optimizer, criterion, scheduler):
             val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
                                     input_type=args.input_type, outshape=args.outshape)
         else:
-            # train_dataset = OmniJHMDB(args.data_root, args.train_sets, SSDAugmentation(300, None), AnnotationTransform(), 
-            #                         outshape=args.outshape)
+            train_dataset = OmniJHMDB(args.data_root, args.train_sets, SSDAugmentation(300, None), AnnotationTransform(), 
+                                    outshape=args.outshape)
             val_dataset = OmniJHMDB(args.data_root, 'test', BaseTransform(300, None), AnnotationTransform(), 
                                     outshape=args.outshape)
-            train_dataset = val_dataset
     else:
         exit(0)
     

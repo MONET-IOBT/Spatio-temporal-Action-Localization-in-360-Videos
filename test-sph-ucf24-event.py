@@ -703,6 +703,7 @@ def evaluate_tubes(outfile):
         tp = np.cumsum(result == 1)
         fp = fp.astype(np.float64)
         tp = tp.astype(np.float64)
+        # need to calculate AUC
         cdet = 0
         if len(tp) > 0:
             cdet = int(tp[-1])
