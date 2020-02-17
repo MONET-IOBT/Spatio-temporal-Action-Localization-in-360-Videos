@@ -187,7 +187,7 @@ class OmniDataset(data.Dataset):
 
         # load backgorounds
         self.bg_imgs = []
-        img_root = '/home/monet/research/realtime-action-detection/data/background/'
+        img_root = '/home/bo/research/realtime-action-detection/data/background/'
         for bg_idx in range(1,23):
             img_name = img_root + str(bg_idx) + '.jpg'
             bg_img = cv2.imread(img_name)
@@ -229,13 +229,41 @@ class OmniDataset(data.Dataset):
             self.vid2rot[vid] = (rot_x,rot_y,rot_z)
 
         # save jhmdb convereted data in cache
-        
-        # self.final_dataset_location = self.root + 'cache/final_dataset_' + self.dataset.image_set + '.npy'
-        # self.original_annot_location = self.root +'splitfiles/finalAnnots.mat'
-        # self.final_annot_location = self.root + 'splitfiles/correctedAnnots_' + self.dataset.image_set + '.mat'
+        if self.dataset.image_set == 'test' and self.name == 'jhmdb':
+            original_annot_location = '/home/bo/research/dataset/ucf24/splitfiles/finalAnnots.mat'
+            final_annot_location = self.root + 'splitfiles/correctedAnnots_' + self.dataset.image_set + '.mat'
+            # if os.path.exists(final_annot_location):
+            #     return
+            import scipy.io as sio
+            import copy
+            old_annots = sio.loadmat(original_annot_location)
+            annot = old_annots['annot']
+            template = annot[0][0]
+            tubes = []
+            for vid, video in enumerate(self.dataset.vddb):
+                print(vid,video['video_name'],len(video['gt_bboxes']))
+                new_tube = copy.deepcopy(template)
+                new_tube[0][0][0] = len(video['gt_bboxes'])
+                new_tube[1] = [video['video_name']]
+                new_tube[2][0][0][0][0][0] = len(video['gt_bboxes'])
+                new_tube[2][0][0][1][0][0] = 1
+                new_tube[2][0][0][2][0][0] = video['gt_label'] + 1
+                new_boxes = []
+                for fid in range(len(video['gt_bboxes'])):
+                    old_label = np.concatenate((video['gt_bboxes'][fid], [video['gt_label']]))
+                    label = self._get_label([old_label], *self.vid2rot[vid])[0]
+                    new_boxes.append([int(label[0]*1024),int(label[1]*512),int(label[2]*1024),int(label[3]*512)])
+                new_tube[2][0][0][3] = new_boxes
+                tubes.append(new_tube)
+
+            sio.savemat(final_annot_location,{'annot':tubes})
+            exit(0)
 
         # if self.dataset.image_set == 'test':
             # data_type = '2d'
+            # self.original_annot_location = self.root +'splitfiles/finalAnnots.mat'
+            # self.final_annot_location = self.root + 'splitfiles/correctedAnnots_' + self.dataset.image_set + '.mat'
+
         #     print('transforming annotation')
         #     assert(os.path.exists(self.original_annot_location))
         #     import collections
@@ -396,7 +424,6 @@ class OmniJHMDB(OmniDataset):
         super(OmniJHMDB, self).__init__(self.JHMDB, *args, **kwargs)
 
 if __name__ == '__main__':
-
     import os
     import argparse
     from PIL import Image

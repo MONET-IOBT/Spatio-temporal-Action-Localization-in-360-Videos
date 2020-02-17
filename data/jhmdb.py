@@ -250,7 +250,7 @@ if __name__ == '__main__':
   from data import UCF24Detection, AnnotationTransform, BaseTransform, JHMDB
   from PIL import Image
   data_root = '/home/bo/research/dataset/jhmdb/'
-  dataset = JHMDB(data_root, 'test', BaseTransform(300, None),AnnotationTransform())
+  dataset = JHMDB(data_root, 'train', BaseTransform(300, None),AnnotationTransform())
   path = os.path.join('output/demo', '%d.png' % 0)
   x, label, _ = dataset[1000]
 
