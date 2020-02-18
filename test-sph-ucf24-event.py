@@ -11,8 +11,8 @@
 import torch
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
-from data.omni_dataset import OmniUCF24
-from data import AnnotationTransform, UCF24Detection, BaseTransform, CLASSES, detection_collate, v1,v2,v3,v4,v5,v6
+from data.omni_dataset import OmniUCF24,OmniJHMDB
+from data import AnnotationTransform, UCF24Detection, JHMDB, BaseTransform, UCF24_CLASSES, JHMDB_CLASSES, detection_collate, v1,v2,v3,v4,v5,v6
 from model.fpnssd.net import FPNSSD512
 from model.sph_ssd import build_vgg_ssd
 from model.vggssd.net import SSD512
@@ -29,9 +29,9 @@ def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='v6', help='The version of config')
+parser.add_argument('--version', default='2', help='The version of config')
 parser.add_argument('--basenet', default='fpn_reducedfc.pth', help='pretrained base model')
-parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
+parser.add_argument('--dataset', default='jhmdb', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb can take flow as well')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
@@ -51,7 +51,7 @@ parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence 
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
 parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or ktn')
-parser.add_argument('--data_type', default='2d', help='2d or 3d')
+parser.add_argument('--data_type', default='3d', help='2d or 3d')
 
 args = parser.parse_args()
 all_versions = [v1,v2,v3,v4,v5,v6]
@@ -70,6 +70,8 @@ if args.cuda and torch.cuda.is_available():
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
+
+CLASSES = UCF24_CLASSES if args.dataset == 'ucf24' else JHMDB_CLASSES
 
 # use the score of a box if the overlaping > T
 def score_of_edge(v1,v2,iouth):
@@ -340,15 +342,9 @@ def genActionPaths(video_result, a, nms_thresh, iouth,gap):
 
 # generate path from from frame-level detections
 def actionPath(video_result):
-    opt = {}
-    opt['actions'] = ['Basketball','BasketballDunk','Biking','CliffDiving','CricketBowling',
-        'Diving','Fencing','FloorGymnastics','GolfSwing','HorseRiding','IceDancing',
-        'LongJump','PoleVault','RopeClimbing','SalsaSpin','SkateBoarding','Skiing',
-        'Skijet','SoccerJuggling','Surfing','TennisSwing','TrampolineJumping',
-        'VolleyballSpiking','WalkingWithDog']
     gap = 3
     iouth = 0.1
-    numActions = len(opt['actions'])
+    numActions = len(CLASSES)
     nmsThresh = 0.45
     allPath = {}
     for a in range(1,numActions+1):
@@ -606,20 +602,20 @@ def voc_ap(rec, prec, use_07_metric=False):
     return ap
 
 # count of detected tubes per class
-cc = [0 for _ in range(24)]
+cc = [0 for _ in range(len(CLASSES))]
 # result for each detected tube per class
 allscore = {}
-for a in range(24):
+for a in range(len(CLASSES)):
     allscore[a] = np.zeros((10000,2))
 # num of gt tubes per class
-total_num_gt_tubes = [0 for _ in range(24)]
+total_num_gt_tubes = [0 for _ in range(len(CLASSES))]
 # avg iou per class
-averageIoU = np.zeros(24)
+averageIoU = np.zeros(len(CLASSES))
 preds = []
 gts = []
 
 def get_PR_curve(annot, xmldata, iouth):
-    numActions = 24
+    numActions = len(CLASSES)
     maxscore = -10000
     # annotName = annot[1][0]
     action_id = annot[2][0][0][2] - 1
@@ -683,12 +679,8 @@ def get_PR_curve(annot, xmldata, iouth):
     return pred == gt
 
 def evaluate_tubes(outfile):
-    actions = ['Basketball','BasketballDunk','Biking','CliffDiving','CricketBowling',
-        'Diving','Fencing','FloorGymnastics','GolfSwing','HorseRiding','IceDancing',
-        'LongJump','PoleVault','RopeClimbing','SalsaSpin','SkateBoarding','Skiing',
-        'Skijet','SoccerJuggling','Surfing','TennisSwing','TrampolineJumping',
-        'VolleyballSpiking','WalkingWithDog']
-    numActions = 24
+    actions = CLASSES
+    numActions = len(CLASSES)
     AP = np.zeros(numActions)
     AIoU = np.zeros(numActions)
     # todo: need to store all detection info of all videos into allscore
@@ -732,16 +724,14 @@ def evaluate_tubes(outfile):
 # smooth tubes and evaluate them
 def getTubes(allPath,video_id):
     # read all groundtruth actions
-    if args.data_type == '2d':
-        final_annot_location = args.data_root + 'splitfiles/correctedAnnots_test_2d.mat'
-    else:
-        final_annot_location = args.data_root + 'splitfiles/correctedAnnots_test.mat'
+    final_annot_location = args.data_root + 'splitfiles/correctedAnnots_test.mat'
     annot = sio.loadmat(final_annot_location)
     annot = annot['annot'][0][video_id]
+    print(annot)
     # need to load annot of jhmdb
     # smooth action path
     alpha = 3
-    numActions = 24
+    numActions = len(CLASSES)
     smoothedtubes = actionPathSmoother(allPath,alpha,numActions)
 
     min_num_frames = 8
@@ -823,6 +813,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 gt[:, 2] *= width
                 gt[:, 1] *= height
                 gt[:, 3] *= height
+                print(gt)
                 gt_boxes.append(gt)
                 decoded_boxes = decode(loc_data[b].data, prior_data.data, args.cfg['variance']).clone()
                 conf_scores = net.softmax(conf_preds[b]).data.clone()
@@ -936,18 +927,24 @@ def main():
             cudnn.benchmark = True
         print('Finished loading model %d !' % iteration)
         # Load dataset
-        # dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, means), AnnotationTransform(), 
-        #                     cfg=args.cfg, input_type=args.input_type, 
-        #                     outshape=args.outshape, full_test=True)
         if args.data_type == '2d':
-            dataset = UCF24Detection(args.data_root, 'test', BaseTransform(300, args.means),
-                                         AnnotationTransform(), input_type=args.input_type,
-                                         full_test=True)
+            if args.dataset == 'ucf24':
+                dataset = UCF24Detection(args.data_root, 'test', BaseTransform(300, args.means),
+                                             AnnotationTransform(), input_type=args.input_type,
+                                             full_test=True)
+            else:
+                dataset = JHMDB(args.data_root, 'test', BaseTransform(300, None), 
+                                        AnnotationTransform(), split=1)
         elif args.data_type == '3d':
-            dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
-                                    cfg=args.cfg, input_type=args.input_type, outshape=args.outshape, full_test=True)
+            if args.dataset == 'ucf24':
+                dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
+                                        input_type=args.input_type, outshape=args.outshape, full_test=True)
+            else:
+                dataset = OmniJHMDB(args.data_root, 'test', BaseTransform(300, None), AnnotationTransform(), 
+                                    outshape=args.outshape)
         else:
             exit(0)
+
         # evaluation
         torch.cuda.synchronize()
         tt0 = time.perf_counter()
