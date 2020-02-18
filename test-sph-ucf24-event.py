@@ -727,7 +727,6 @@ def getTubes(allPath,video_id):
     final_annot_location = args.data_root + 'splitfiles/correctedAnnots_test.mat'
     annot = sio.loadmat(final_annot_location)
     annot = annot['annot'][0][video_id]
-    print(annot)
     # need to load annot of jhmdb
     # smooth action path
     alpha = 3
@@ -813,7 +812,6 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 gt[:, 2] *= width
                 gt[:, 1] *= height
                 gt[:, 3] *= height
-                print(gt)
                 gt_boxes.append(gt)
                 decoded_boxes = decode(loc_data[b].data, prior_data.data, args.cfg['variance']).clone()
                 conf_scores = net.softmax(conf_preds[b]).data.clone()
