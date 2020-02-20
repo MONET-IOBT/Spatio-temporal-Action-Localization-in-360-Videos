@@ -23,7 +23,7 @@ v6 = {
 
     'clip' : True,
 
-    'name' : 'fpn_cube_512x1024',
+    'name' : 'fpn_cube',
 
     'base' : 'fpn_cube',
 }
@@ -45,7 +45,7 @@ v5 = {
 
     'clip' : True,
 
-    'name' : 'yolov3_512x1024',
+    'name' : 'yolov3',
 
     'base' : 'yolov3',
 }
@@ -67,7 +67,7 @@ v4 = {
 
     'clip' : True,
 
-    'name' : 'fpn_mobile_512x1024',
+    'name' : 'fpn_mobile',
 
     'base' : 'fpn_mobile',
 }
@@ -89,7 +89,7 @@ v3 = {
 
     'clip' : True,
 
-    'name' : 'mobile_vgg_512x1024',
+    'name' : 'mobile_vgg',
 
     'base' : 'mobile_vgg',
 }
@@ -111,7 +111,7 @@ v2 = {
 
     'clip' : True,
 
-    'name' : 'fpn_512x1024',
+    'name' : 'fpn',
 
     'base' : 'fpn',
 }
@@ -134,7 +134,7 @@ v1 = {
 
     'clip' : True,
 
-    'name' : 'vgg16_512x1024',
+    'name' : 'vgg16',
 
     'base' : 'vgg16',
 }

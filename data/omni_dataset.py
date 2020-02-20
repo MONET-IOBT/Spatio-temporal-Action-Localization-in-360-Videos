@@ -146,9 +146,7 @@ def uv2img_idx(uv, h, w, u_fov, v_fov, rot_x=0, rot_y=0, rot_z=0):
     x[invalid] = -1
     y[invalid] = -1
 
-    invalid = (x < 0) | (x > w) | (y < 0) | (y > h)
-
-    return np.stack([y, x], axis=0),invalid
+    return np.stack([y, x], axis=0),x,y
 
 
 class OmniDataset(data.Dataset):
@@ -173,6 +171,7 @@ class OmniDataset(data.Dataset):
         self.video_list = dataset.video_list
         self.ids = dataset.ids
         self.root = dataset.root
+        self.user = '/home/monet/'
 
         self.aug = None
         if fix_aug:
@@ -187,7 +186,7 @@ class OmniDataset(data.Dataset):
 
         # load backgorounds
         self.bg_imgs = []
-        img_root = '/home/monet/research/realtime-action-detection/data/background/'
+        img_root = self.user + 'research/realtime-action-detection/data/background/'
         for bg_idx in range(1,23):
             img_name = img_root + str(bg_idx) + '.jpg'
             bg_img = cv2.imread(img_name)
@@ -206,7 +205,7 @@ class OmniDataset(data.Dataset):
                 if self.aug is not None:
                     rot_y = self.aug[idx]['y_rotate']
                 else:
-                    rot_y = np.random.uniform(-np.pi/2, np.pi/2)
+                    rot_y = np.random.uniform(-np.pi/2, np.pi/2)+2
             else:
                 rot_y = 0
 
@@ -228,46 +227,53 @@ class OmniDataset(data.Dataset):
 
             self.vid2rot[vid] = (rot_x,rot_y,rot_z)
 
-        # save jhmdb convereted data in cache
-        if self.dataset.image_set == 'test' and self.name == 'jhmdb':
-            original_annot_location = '/home/monet/research/dataset/ucf24/splitfiles/finalAnnots.mat'
-            final_annot_location = self.root + 'splitfiles/correctedAnnots_' + self.dataset.image_set + '.mat'
-            if os.path.exists(final_annot_location):
-                return
-            import scipy.io as sio
-            import copy
-            old_annots = sio.loadmat(original_annot_location)
-            annot = old_annots['annot']
-            template = annot[0][0]
-            tubes = []
-            for vid, video in enumerate(self.dataset.vddb):
-                print(vid,video['video_name'],len(video['gt_bboxes']))
-                new_tube = copy.deepcopy(template)
-                new_tube[0][0][0] = len(video['gt_bboxes'])
-                new_tube[1] = [video['video_name']]
-                new_tube[2][0][0][0][0][0] = len(video['gt_bboxes'])
-                new_tube[2][0][0][1][0][0] = 1
-                new_tube[2][0][0][2][0][0] = video['gt_label'] + 1
-                new_boxes = []
-                for fid in range(len(video['gt_bboxes'])):
-                    gt_box = video['gt_bboxes'][fid]
-                    gt_box[0] /= 320
-                    gt_box[1] /= 240
-                    gt_box[2] /= 320
-                    gt_box[3] /= 240
-                    old_label = np.concatenate((gt_box, [video['gt_label']]))
-                    label = self._get_label([old_label], *self.vid2rot[vid])[0]
-                    new_boxes.append([int(label[0]*1024),int(label[1]*512),int(label[2]*1024),int(label[3]*512)])
-                new_tube[2][0][0][3] = new_boxes
-                tubes.append(new_tube)
+        # # save jhmdb convereted data in cache
+        # if self.dataset.image_set == 'test' and self.name == 'jhmdb':
+        #     original_annot_location = self.user + 'research/dataset/ucf24/splitfiles/finalAnnots.mat'
+        #     final_annot_location = self.root + 'splitfiles/correctedAnnots_' + self.dataset.image_set + '.mat'
+        #     if os.path.exists(final_annot_location):
+        #         return
+        #     import scipy.io as sio
+        #     import copy
+        #     old_annots = sio.loadmat(original_annot_location)
+        #     annot = old_annots['annot']
+        #     template = annot[0][0]
+        #     tubes = []
+        #     for vid, video in enumerate(self.dataset.vddb):
+        #         print(vid,video['video_name'],len(video['gt_bboxes']))
+        #         new_tube = copy.deepcopy(template)
+        #         new_tube[0][0][0] = len(video['gt_bboxes'])
+        #         new_tube[1] = [video['video_name']]
+        #         new_tube[2][0][0][0][0][0] = len(video['gt_bboxes'])
+        #         new_tube[2][0][0][1][0][0] = 1
+        #         new_tube[2][0][0][2][0][0] = video['gt_label'] + 1
+        #         new_boxes = []
+        #         for fid in range(len(video['gt_bboxes'])):
+        #             gt_box = video['gt_bboxes'][fid]
+        #             gt_box[0] /= 320
+        #             gt_box[1] /= 240
+        #             gt_box[2] /= 320
+        #             gt_box[3] /= 240
+        #             old_label = np.concatenate((gt_box, [video['gt_label']]))
 
-            sio.savemat(final_annot_location,{'annot':tubes})
+        #             h, w = 300,300
+        #             uv = genuv(*self.outshape) # out_h, out_w, (out_phi, out_theta)
+        #             fov = self.fov * np.pi / 180
 
-        # if self.dataset.image_set == 'test':
-            # data_type = '2d'
-            # self.original_annot_location = self.root +'splitfiles/finalAnnots.mat'
-            # self.final_annot_location = self.root + 'splitfiles/correctedAnnots_' + self.dataset.image_set + '.mat'
+        #             img_idx, x, y = uv2img_idx(uv, h, w, fov, fov, *self.vid2rot[vid])
 
+        #             label = self._transform_label([old_label],x, y)[0]
+        #             new_boxes.append([int(label[0]*1024),int(label[1]*512),int(label[2]*1024),int(label[3]*512)])
+        #         new_tube[2][0][0][3] = new_boxes
+        #         tubes.append(new_tube)
+
+        #     sio.savemat(final_annot_location,{'annot':tubes})
+
+        # elif self.dataset.image_set == 'test' and self.name == 'ucf24':
+        #     self.original_annot_location = self.root +'splitfiles/finalAnnots.mat'
+        #     self.final_annot_location = self.root + 'splitfiles/correctedAnnots_' + self.dataset.image_set + '.mat'
+        #     if os.path.exists(self.final_annot_location):
+        #         return
         #     print('transforming annotation')
         #     assert(os.path.exists(self.original_annot_location))
         #     import collections
@@ -279,18 +285,23 @@ class OmniDataset(data.Dataset):
         #         video_id = annot_info[0]
         #         videoname = self.video_list[video_id]
 
-        #         label = self._get_label(self.dataset[idx][1], *self.vid2rot[video_id])
+        #         img, label, index = self.dataset[idx]
+
+        #         h, w = img.shape[1:]
+        #         uv = genuv(*self.outshape) # out_h, out_w, (out_phi, out_theta)
+        #         fov = self.fov * np.pi / 180
+
+        #         img_idx, x, y = uv2img_idx(uv, h, w, fov, fov, *self.vid2rot[video_id])
+
+        #         label = self._transform_label(label,x, y)
         #         old_label = self.ids[idx][3]
         #         for old,new in zip(old_label,label):
-                    # old2 = (int(old[0]),int(old[1]),int(old[2]-old[0]),int(old[3]-old[1]))
-                    # if sum(old2) == 0:continue
-                    # if data_type == '2d':
-                    #     self.annot_map[videoname][old2] = old
-                    # else:
-                    #     self.annot_map[videoname][old2] = [int(new[0]*1024),
-                    #                                         int(new[1]*512),
-                    #                                         int(new[2]*1024),
-                    #                                         int(new[3]*512)]
+        #             old2 = (int(old[0]),int(old[1]),int(old[2]-old[0]),int(old[3]-old[1]))
+        #             if sum(old2) == 0:continue
+        #             self.annot_map[videoname][old2] = [int(new[0]*1024),
+        #                                                 int(new[1]*512),
+        #                                                 int(new[2]*1024),
+        #                                                 int(new[3]*512)]
         #         if idx%100 == 0:
         #             print('Transforming %6d/%6d'%(idx,len(dataset)))
 
@@ -311,7 +322,6 @@ class OmniDataset(data.Dataset):
         #             print(filename)
         #     sio.savemat(self.final_annot_location,{'annot':old_annots['annot'][0]})
         #     print('transform finishes')
-        #     exit(0)
 
     def __len__(self):
         return len(self.dataset)
@@ -333,84 +343,73 @@ class OmniDataset(data.Dataset):
 
         img, label, index = self.dataset[idx]
 
-        if len(img.shape)==2:
-            img = self._get_img(img, rot_x, rot_y, rot_z)
-            label = self._get_label(label, rot_x, rot_y, rot_z)
-        else:
-            img_stack = []
-            for ch in range(img.shape[0]):
-                img_ch = self._get_img(img, rot_x, rot_y, rot_z, bg_img, ch=ch)
-                img_stack.append(img_ch.unsqueeze(0))
-            img = torch.cat(img_stack, dim=0)
-            assert(img.shape[0]==3)
-            label = self._get_label(label, rot_x, rot_y, rot_z)
-
-        return img, label, index
-
-    def _get_label(self, bboxes, rot_x, rot_y, rot_z):
-
-        new_bboxes = []
-        for xmin,ymin,xmax,ymax,ac_type in bboxes:
-            umin = np.arctan((xmin-0.5)*2*1.7321)
-            umax = np.arctan((xmax-0.5)*2*1.7321)
-
-            all_v = []
-            all_v += [np.arctan2(ymin-0.5,np.sqrt(1./12+(xmin-0.5)**2))]
-            all_v += [np.arctan2(ymin-0.5,np.sqrt(1./12+(xmax-0.5)**2))]
-            all_v += [np.arctan2(ymax-0.5,np.sqrt(1./12+(xmin-0.5)**2))]
-            all_v += [np.arctan2(ymax-0.5,np.sqrt(1./12+(xmax-0.5)**2))]
-            if xmin <= 0.5 and xmax >= 0.5:
-                all_v += [np.arctan2(ymin-0.5,np.sqrt(1./12))]
-                all_v += [np.arctan2(ymax-0.5,np.sqrt(1./12))]
-
-            # [-0.5,0.5] left->right;top->bottom
-            umin,umax = umin/2/np.pi,umax/2/np.pi
-            vmin,vmax = min(all_v)/np.pi,max(all_v)/np.pi
-
-            h,w = vmax-vmin,umax-umin
-            cu,cv = (umax+umin)/2,(vmax+vmin)/2 
-            
-            # rotate around origin before translation
-            cu2 = cu * np.cos(rot_x) + cv * np.sin(rot_x)
-            cv2 = -cu * np.sin(rot_x) + cv * np.cos(rot_x)
-            cu,cv = cu2,cv2
-
-            cu += 0.5
-            cv += 0.5
-
-            cu -= rot_z/2/np.pi
-            cv -= rot_y/np.pi
-            cu = cu%1
-            if cv > 1:
-                cv = 2 - cv
-                cu = cu-0.5 if cu>=0.5 else cu+0.5
-            elif cv < 0:
-                cv = -cv
-                cu = cu-0.5 if cu>=0.5 else cu+0.5
-            new_bboxes.append([cu-w/2,cv-h/2,cu+w/2,cv+h/2,ac_type])
-        bboxes = new_bboxes
-
-        return bboxes
-
-
-    def _get_img(self, img, rot_x, rot_y, rot_z, bg_img, ch = None):
-        # get image content from one channel
-
-        if ch is not None:
-            img = img[ch,:,:]
-        h, w = img.shape[:2]
+        h, w = img.shape[1:]
         uv = genuv(*self.outshape) # out_h, out_w, (out_phi, out_theta)
         fov = self.fov * np.pi / 180
 
-        img_idx, invalid = uv2img_idx(uv, h, w, fov, fov, rot_x, rot_y, rot_z)
-        x = map_coordinates(img, img_idx, order=1)
+        img_idx, x, y = uv2img_idx(uv, h, w, fov, fov, rot_x, rot_y, rot_z)
 
-        if bg_img is not None and ch is not None:
-            means = (104, 117, 123)
-            bg_img_ch = bg_img[:,:,2-ch]
-            x[invalid] = bg_img_ch[invalid] - means[ch]
+        invalid = (x < 0) | (x > w) | (y < 0) | (y > h)
 
-        return torch.FloatTensor(x.copy())
+        img_stack = []
+        for ch in range(img.shape[0]):
+            _img = img[ch,:,:]
+            
+            _img = map_coordinates(_img, img_idx, order=1)
+
+            if bg_img is not None:
+                means = (104, 117, 123)
+                bg_img_ch = bg_img[:,:,2-ch]
+                _img[invalid] = bg_img_ch[invalid] - means[2-ch]
+
+            img_ch = torch.FloatTensor(_img.copy())
+            img_stack.append(img_ch.unsqueeze(0))
+        img = torch.cat(img_stack, dim=0)
+
+        new_labels = self._transform_label(label,x, y)
+
+        return img, new_labels, index
+
+    def _transform_label(self, bboxes, x, y):
+        new_labels = []
+        for x1,y1,x2,y2,c in bboxes:
+            x1*=300
+            x2*=300
+            y1*=300
+            y2*=300
+            bbox = (x > x1) & (x < x2) & (y < y2) & (y > y1)
+            # _img[bbox] = 0
+            (a, b) = np.where(bbox > 0)
+            x1 = b.min()
+            x2 = b.max()
+            if x2-x1 == 1023:
+                (_,b) = np.where(bbox[:,:512]>0)
+                x3 = b.max()
+                (_,b) = np.where(bbox[:,512:]>0)
+                x4 = b.min() + 512
+                if x3 >= 1023-x4:
+                    x1 = x4-1024
+                    x2 = x3
+                else:
+                    x1 = x4
+                    x2 = 1024 + x3
+
+            y1 = a.min()
+            y2 = a.max()
+            if y2-y1 == 511:
+                (a,_) = np.where(bbox[:256,:]>0)
+                y3 = a.max()
+                (a,_) = np.where(bbox[256:,:]>0)
+                y4 = a.min() + 256
+                if y3 >= 511-y4:
+                    y1 = y4-512
+                    y2 = y3
+                else:
+                    y1 = y4
+                    y2 = 512 + y3
+
+            new_labels.append([x1/1024,y1/512,x2/1024,y2/512,c])
+        return new_labels
 
 
 from data import UCF24Detection, AnnotationTransform, BaseTransform, JHMDB
@@ -437,7 +436,7 @@ if __name__ == '__main__':
                         help='image indices to demo')
     parser.add_argument('--out_dir', default='output/demo',
                         help='directory to output demo image')
-    parser.add_argument('--dataset', default='OmniJHMDB',
+    parser.add_argument('--dataset', default='OmniUCF24',
                         choices=['OmniUCF24','OmniJHMDB'],
                         help='which dataset to use')
 
@@ -476,14 +475,27 @@ if __name__ == '__main__':
         exit(0)
 
     print(len(dataset))
+    from PIL import ImageDraw
 
     for idx in args.idx:
         idx = int(idx)
         path = os.path.join(args.out_dir, '%d.png' % idx)
         x, label, _ = dataset[idx]
         # for ch in range(0,3):
-        #     x[ch,:,:] -= args.means[ch]
+        #     x[ch,:,:] += args.means[2-ch]
 
         print(path, label)
         img = Image.fromarray(x.permute(1, 2, 0).numpy().astype(np.uint8))
+        draw = ImageDraw.Draw(img)
+        for x1,y1,x2,y2,_ in label:
+            x1*=1024
+            x2*=1024
+            y1*=512
+            y2*=512
+            x = (x1+x2)/2
+            y = (y1+y2)/2
+            w = x2-x1
+            h = y2-y1
+            draw.rectangle(((x1, y1), (x2, y2)), fill="black")
+
         img.save(path)

@@ -49,9 +49,9 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='6', help='The version of config')
+parser.add_argument('--version', default='2', help='The version of config')
 # parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
-parser.add_argument('--dataset', default='jhmdb', help='pretrained base model')
+parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
@@ -106,8 +106,8 @@ def main():
     args.print_step = 10
 
     ## Define the experiment Name will used to same directory and ENV for visdom
-    args.exp_name = '{}-SSD-{}-{}-{}-bs-{}-{}-lr-{:05d}-{}'.format(args.net_type, args.data_type, args.dataset,
-                args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000), args.cfg['name'])
+    args.exp_name = '{}-SSD-{}-{}-{}-bs-{}-{}-lr-{:05d}'.format(args.net_type, args.data_type, args.dataset,
+                args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000))
 
     args.save_root += args.dataset+'/'
     args.save_root = args.save_root+'cache/'+args.exp_name+'/'
