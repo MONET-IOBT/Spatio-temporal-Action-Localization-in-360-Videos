@@ -10,7 +10,7 @@ from model.fpnssd.fpn import FPN50
 from layers.functions.sph_prior_box import SphPriorBox
 from model.spherenet.sphere_cnn import SphereConv2D, SphereMaxPool2D
 from model.KernelTransformer.KTNLayer import KTNConv
-from data import v6
+from data import v2
 
 class FPNSSD512(nn.Module):
 

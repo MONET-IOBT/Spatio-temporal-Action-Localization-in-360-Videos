@@ -16,7 +16,6 @@ import os
 import sys
 sys.path.insert(0, '/home/bo/research/realtime-action-detection')
 from utils.augmentations import SSDAugmentation
-from data import v6
 
 def genuv(h, w):
     u, v = np.meshgrid(np.arange(w), np.arange(h))

@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, '/home/bo/research/realtime-action-detection')
 from model.mobile_fpnssd.fpn import FPN50
 from layers.functions.sph_prior_box import SphPriorBox
-from data import v1,v2,v3,v4,v5,v6
+from data import v1,v2,v3,v4,v5
 
 class MobileFPNSSD512(nn.Module):
 

@@ -10,7 +10,7 @@ from model.fpnssd.fpn import FPN50
 from layers.functions.sph_prior_box import SphPriorBox
 from model.spherenet.sphere_cnn import SphereConv2D, SphereMaxPool2D
 from model.KernelTransformer.KTNLayer import KTNConv
-from data import v6
+from data import v2
 
 class FPNSSD512CUBE(nn.Module):
 
@@ -63,7 +63,7 @@ class FPNSSD512CUBE(nn.Module):
         return loc_preds, cls_preds, self.priors
 
 def test():
-    net = FPNSSD512CUBE(25,v6)
+    net = FPNSSD512CUBE(25,v2)
     loc_preds, cls_preds, priors = net(Variable(torch.randn(1,3,512,1024)))
     print(loc_preds.size(), cls_preds.size(), priors.size())
     print(priors)

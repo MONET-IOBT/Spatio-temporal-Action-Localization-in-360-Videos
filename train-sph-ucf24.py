@@ -19,7 +19,7 @@ import argparse
 import torch.utils.data as data
 from data.omni_dataset import OmniUCF24,OmniJHMDB
 from data import AnnotationTransform, UCF24_CLASSES, JHMDB_CLASSES, BaseTransform, UCF24Detection, JHMDB, detection_collate
-from data import v1,v2,v3,v4,v5,v6
+from data import v1,v2,v3,v4,v5
 from utils.augmentations import SSDAugmentation
 # from layers.modules import MultiBoxLoss
 from layers.modules.sph_multibox_loss import SphMultiBoxLoss
@@ -55,7 +55,7 @@ parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=2, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--max_epoch', default=6, type=int, help='Number of training epochs')
@@ -75,7 +75,7 @@ parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation th
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
-parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or ktn')
+parser.add_argument('--net_type', default='ktn', help='conv2d or sphnet or ktn')
 parser.add_argument('--data_type', default='3d', help='2d or 3d')
 
 ## Parse arguments
@@ -91,7 +91,7 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 
 def main():
-    all_versions = [v1,v2,v3,v4,v5,v6]
+    all_versions = [v1,v2,v3,v4,v5]
     args.cfg = all_versions[int(args.version)-1]
     args.basenet = args.cfg['base'] + '_reducedfc.pth'
     args.outshape = args.cfg['min_dim']
