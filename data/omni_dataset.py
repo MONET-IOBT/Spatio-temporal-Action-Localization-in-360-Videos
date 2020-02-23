@@ -471,7 +471,7 @@ if __name__ == '__main__':
     np.random.seed(111)
 
     if args.dataset == 'OmniUCF24':
-        args.data_root = '/home/bo/research/dataset/ucf24/'
+        args.data_root = '/home/monet/research/dataset/ucf24/'
         dataset = OmniUCF24(args.data_root, 'train', BaseTransform(300, args.means),
                            AnnotationTransform(), input_type=args.input_type, full_test=False)
     elif args.dataset == 'OmniJHMDB':
