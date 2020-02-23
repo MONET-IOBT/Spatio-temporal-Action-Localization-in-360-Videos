@@ -472,8 +472,8 @@ if __name__ == '__main__':
 
     if args.dataset == 'OmniUCF24':
         args.data_root = '/home/monet/research/dataset/ucf24/'
-        dataset = OmniUCF24(args.data_root, 'train', BaseTransform(300, args.means),
-                           AnnotationTransform(), input_type=args.input_type, full_test=False)
+        dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means),
+                           AnnotationTransform(), input_type=args.input_type, full_test=True)
     elif args.dataset == 'OmniJHMDB':
         args.data_root = '/home/bo/research/dataset/jhmdb/'
         dataset = OmniJHMDB(args.data_root, 'test', BaseTransform(300, None),
