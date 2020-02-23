@@ -204,7 +204,7 @@ class OmniDataset(data.Dataset):
                 if self.aug is not None:
                     rot_y = self.aug[idx]['y_rotate']
                 else:
-                    rot_y = np.random.uniform(-np.pi/2, np.pi/2) + 2
+                    rot_y = np.random.uniform(-np.pi/2, np.pi/2)
             else:
                 rot_y = 0
 
