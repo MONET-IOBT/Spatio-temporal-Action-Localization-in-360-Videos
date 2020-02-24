@@ -25,6 +25,11 @@ import numpy as np
 import pickle
 import scipy.io as sio # to save detection as mat files
 from PIL import ImageDraw,Image
+import socket
+import sys
+import cv2
+import struct ## new
+import zlib
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -36,7 +41,7 @@ parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb can take flow as well')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=1, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=1, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--eval_iter', default='150000,', type=str, help='Number of training iterations')
@@ -796,12 +801,28 @@ def process_video_result(video_result,outfile,iteration):
 
 def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_classes, outfile, thresh=0.5 ):
     """ Test a SSD network on an Action image database. """
-
-    val_data_loader = data.DataLoader(dataset, args.batch_size, num_workers=args.num_workers,
+    val_data_loader = torch.utils.data.DataLoader(dataset, args.batch_size, num_workers=args.num_workers,
                             shuffle=False, collate_fn=detection_collate, pin_memory=True)
+    HOST=''
+    PORT=8485
+
+    s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    print('Socket created')
+
+    s.bind((HOST,PORT))
+    print('Socket bind complete')
+    s.listen(10)
+    print('Socket now listening')
+
+    conn,addr=s.accept()
+
+    data = b""
+    payload_size = struct.calcsize(">L")
+    print("payload_size: {}".format(payload_size))
+
     image_ids = dataset.ids
     save_ids = []
-    val_step = 250
+    val_step = 1
     num_images = len(dataset)
     video_list = dataset.video_list
     det_boxes = [[] for _ in range(len(CLASSES))]
@@ -823,20 +844,37 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     video_result = {}
     video_result['data'] = []
     video_result['frame'] = []
+
+    index = 0
+
     with torch.no_grad():
         for val_itr in range(len(val_data_loader)):
-            if not batch_iterator:
-                batch_iterator = iter(val_data_loader)
-
-            torch.cuda.synchronize()
             t1 = time.perf_counter()
+            while len(data) < payload_size:
+                # print("Recv: {}".format(len(data)))
+                data += conn.recv(4096)
 
-            images, targets, img_indexs = next(batch_iterator)
+            packed_msg_size = data[:payload_size]
+            data = data[payload_size:]
+            msg_size = struct.unpack(">L", packed_msg_size)[0]
+            
+            while len(data) < msg_size:
+                data += conn.recv(4096)
+            frame_data = data[:msg_size]
+            data = data[msg_size:]
+            t2 = time.perf_counter()
+
+            frame=pickle.loads(frame_data, fix_imports=True, encoding="bytes")
+            frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
+
+            images = torch.from_numpy(frame).float().permute(2,0,1).unsqueeze(0)
+
             batch_size = images.size(0)
             height, width = images.size(2), images.size(3)
 
             if args.cuda:
                 images = images.cuda()
+            t3 = time.perf_counter()
             output = net(images)
 
             loc_data = output[0]
@@ -846,17 +884,15 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
             if print_time and val_itr%val_step == 0:
                 torch.cuda.synchronize()
                 tf = time.perf_counter()
-                print('Forward Time {:0.3f}'.format(tf - t1))
+                fps = 1/(tf - t1) 
+                print('Receive time {:0.3f}'.format(t2 - t1),
+                    ', decode time {:0.3f}'.format(t3 - t2),
+                    ', process time {:0.3f}'.format(tf - t3),
+                    ', total time {:0.3f}'.format(tf - t1),
+                    ', speed {:0.3f}'.format(fps))
             for b in range(batch_size):
-                gt = targets[b].numpy()
-                gt[:, 0] *= width
-                gt[:, 2] *= width
-                gt[:, 1] *= height
-                gt[:, 3] *= height
-                gt_boxes.append(gt)
                 decoded_boxes = decode(loc_data[b].data, prior_data.data, args.cfg['variance']).clone()
                 conf_scores = net.softmax(conf_preds[b]).data.clone()
-                index = img_indexs[b]
                 annot_info = image_ids[index]
 
                 frame_num = annot_info[1]; video_id = annot_info[0]; videoname = video_list[video_id]
@@ -865,7 +901,10 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                     # process this video
                     video_result['videoname'] = video_list[pre_video_id]
                     video_result['video_id'] = pre_video_id
+                    t1 = time.perf_counter()
                     process_video_result(video_result,outfile,iteration)
+                    tf = time.perf_counter()
+                    print("Tube generation time {:0.3f}".format(tf-t1), "num tubes =",len(video_result['frame']))
                     video_result['data'] = []
                     video_result['frame'] = []
                 pre_video_id = video_id
@@ -875,43 +914,9 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 res['boxes'] = decoded_boxes
                 video_result['data'].append(res)
                 video_result['frame'].append(images[b])
+            index += 1
 
-                for cl_ind in range(1, num_classes):
-                    scores = conf_scores[:, cl_ind].squeeze()
-                    c_mask = scores.gt(args.conf_thresh)  # greater than minmum threshold
-                    scores = scores[c_mask].squeeze()
-                    # print('scores size',scores.size())
-                    if scores.dim() == 0 or scores.shape[0] == 0:
-                        # print(len(''), ' dim ==0 ')
-                        det_boxes[cl_ind - 1].append(np.asarray([]))
-                        continue
-                    boxes = decoded_boxes.clone()
-                    l_mask = c_mask.unsqueeze(1).expand_as(boxes)
-                    boxes = boxes[l_mask].view(-1, 4)
-                    # idx of highest scoring and non-overlapping boxes per class
-                    ids, counts = nms(boxes, scores, args.nms_thresh, args.topk)  # idsn - ids after nms
-                    scores = scores[ids[:counts]].cpu().numpy()
-                    boxes = boxes[ids[:counts]].cpu().numpy()
-                    # print('boxes sahpe',boxes.shape)
-                    boxes[:, 0] *= width
-                    boxes[:, 2] *= width
-                    boxes[:, 1] *= height
-                    boxes[:, 3] *= height
-
-                    cls_dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=True)
-                    det_boxes[cl_ind - 1].append(cls_dets)
-
-                count += 1
-            if val_itr%val_step == 0:
-                torch.cuda.synchronize()
-                te = time.perf_counter()
-                print('im_detect: {:d}/{:d} time taken {:0.3f}'.format(count, num_images, te - ts))
-                torch.cuda.synchronize()
-                ts = time.perf_counter()
-            if print_time and val_itr%val_step == 0:
-                torch.cuda.synchronize()
-                te = time.perf_counter()
-                print('NMS stuff Time {:0.3f}'.format(te - tf))
+            
         if (len(video_result['data']) > 0):
             # process this video
             process_video_result(video_result,outfile,iteration)
@@ -919,10 +924,6 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
     print('Evaluating detections for itration number ', iteration)
-
-    # #Save detection after NMS along with GT
-    # with open(det_file, 'wb') as f:
-    #     pickle.dump([gt_boxes, det_boxes, save_ids], f, pickle.HIGHEST_PROTOCOL)
 
     return evaluate_detections(gt_boxes, det_boxes, CLASSES, iou_thresh=thresh)
 
@@ -932,7 +933,7 @@ def main():
     args.means = (104, 117, 123)  # only support voc now
 
     exp_name = '{}-SSD-{}-{}-{}-bs-{}-{}-lr-{:05d}'.format(args.net_type, args.data_type, args.dataset,
-                args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000))
+                args.input_type, 4, args.cfg['base'], int(args.lr*100000))
 
     args.save_root += args.dataset+'/'
     args.data_root += args.dataset+'/'

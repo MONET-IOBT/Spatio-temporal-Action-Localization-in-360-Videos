@@ -170,7 +170,7 @@ class OmniDataset(data.Dataset):
         self.video_list = dataset.video_list
         self.ids = dataset.ids
         self.root = dataset.root
-        self.user = '/home/monet/'
+        self.user = '/home/bo/'
 
         self.aug = None
         if fix_aug:

@@ -16,9 +16,9 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.init as init
 import argparse
-from data.omni_dataset import OmniUCF24, sph_detection_collate
-from data import AnnotationTransform, CLASSES, BaseTransform, UCF24Detection, detection_collate
-from data import v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13
+from data.omni_dataset import OmniUCF24
+from data import AnnotationTransform, BaseTransform, UCF24Detection, detection_collate
+from data import v1,v2,v3,v4,v5
 import torch.utils.data as data
 from utils.augmentations import SSDAugmentation
 import numpy as np
@@ -61,7 +61,7 @@ if args.cuda:
 torch.set_default_tensor_type('torch.FloatTensor')
 
 def main():
-    all_versions = [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13]
+    all_versions = [v1,v2,v3,v4,v5]
     args.cfg = all_versions[int(args.version)-1]
     args.outshape = args.cfg['min_dim']
     args.means = (104, 117, 123)
@@ -73,12 +73,12 @@ def main():
 def start_streaming():
     print('Loading dataset')
     val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
-                            cfg=args.cfg, input_type=args.input_type, outshape=args.outshape)
+                                        input_type=args.input_type, outshape=args.outshape, full_test=True)
 
     val_data_loader = torch.utils.data.DataLoader(val_dataset, 1, num_workers=args.num_workers,
                                  shuffle=False, collate_fn=detection_collate, pin_memory=True)
 
-    num_test_images = 10
+    num_test_images = 50
 
     frames = []
     batch_iterator = None
