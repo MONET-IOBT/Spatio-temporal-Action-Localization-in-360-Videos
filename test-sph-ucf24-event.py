@@ -53,6 +53,7 @@ parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshol
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
 parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or ktn')
 parser.add_argument('--data_type', default='3d', help='2d or 3d')
+parser.add_argument('--lossy', default=True, type=str2bool, help='Lossy image transmission')
 
 args = parser.parse_args()
 all_versions = [v1,v2,v3,v4,v5]
@@ -303,8 +304,8 @@ def incremental_linking(frames,iouth, gap):
 
 def doFilter(video_result,a,f,nms_thresh):
     scores = video_result[f]['scores'][:,a].squeeze()
-    # c_mask = scores.gt(args.conf_thresh)
-    c_mask = scores.gt(0.001)
+    c_mask = scores.gt(args.conf_thresh)
+    # c_mask = scores.gt(0.001)
     scores = scores[c_mask].squeeze()
     if scores.dim() == 0 or scores.shape[0] == 0:
         return np.array([]),np.array([]),np.array([])
@@ -327,6 +328,7 @@ def doFilter(video_result,a,f,nms_thresh):
 
 def genActionPaths(video_result, a, nms_thresh, iouth,gap):
     action_frames = {}
+    t1 = time.perf_counter()
     for f in range(len(video_result)):
         # get decoded boxes of actual size
         boxes,scores,allscores = doFilter(video_result,a,f,nms_thresh)
@@ -336,8 +338,12 @@ def genActionPaths(video_result, a, nms_thresh, iouth,gap):
         action_frames[f]['boxes'] = boxes
         action_frames[f]['scores'] = scores
         action_frames[f]['allscores'] = allscores
+    t2 = time.perf_counter()
 
     paths = incremental_linking(action_frames,iouth, gap)
+    t3 = time.perf_counter()
+    print('Filter:{:0.3f},'.format(t2 - t1),
+        'linking:{:0.3f}'.format(t3 - t2))
     return paths
 
 
@@ -786,10 +792,23 @@ def process_video_result(video_result,outfile,iteration):
     frame_save_dir = args.save_root+'detections/CONV-rgb-'+args.listid+'-'+str(iteration).zfill(6)+'/'
     output_dir = frame_save_dir+videoname
 
+    t1 = time.perf_counter()
     allPath = actionPath(frame_det_res)
+
+    t2 = time.perf_counter()
     res,xmldata = getTubes(allPath,video_id)
+    print(xmldata)
     print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res),"result:",res)
+
+    t3 = time.perf_counter()
     drawTubes(xmldata,output_dir,frames)
+
+    tf = time.perf_counter()
+
+    print('Gen path {:0.3f}'.format(t2 - t1),
+        ', gen tubes {:0.3f}'.format(t3 - t2),
+        ', draw tubes {:0.3f}'.format(tf - t3),
+        ', total time {:0.3f}'.format(tf - t1))
     if video_id>0 and video_id%100 == 0:
         mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
@@ -834,6 +853,19 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
             images, targets, img_indexs = next(batch_iterator)
             batch_size = images.size(0)
             height, width = images.size(2), images.size(3)
+
+            if args.lossy:
+                lossy_images = None
+                for image in images:
+                    lossy_image = image.permute(1,2,0).numpy()
+                    result, lossy_image = cv2.imencode('.jpg', lossy_image, encode_param)
+                    lossy_image = cv2.imdecode(lossy_image, cv2.IMREAD_COLOR)
+                    lossy_image = torch.from_numpy(lossy_image).float().permute(2,0,1).unsqueeze(0)
+                    if lossy_images is None:
+                        lossy_images = lossy_image
+                    else:
+                        torch.cat((lossy_images,lossy_image),0)
+                images = lossy_images
 
             if args.cuda:
                 images = images.cuda()

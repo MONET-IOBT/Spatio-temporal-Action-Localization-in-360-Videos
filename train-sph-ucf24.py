@@ -55,7 +55,7 @@ parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb options are [rgb,brox,fastOF]')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=2, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=2, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--max_epoch', default=6, type=int, help='Number of training epochs')
@@ -69,14 +69,15 @@ parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight dec
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
 parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom Server')
-parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
 parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or ktn')
 parser.add_argument('--data_type', default='3d', help='2d or 3d')
+parser.add_argument('--lossy', default=True, type=str2bool, help='Lossy image transmission')
 
 ## Parse arguments
 args = parser.parse_args()
@@ -237,12 +238,28 @@ def train(args, net, optimizer, criterion, scheduler):
     torch.cuda.synchronize()
     t0 = time.perf_counter()
     iteration = 0
+    encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
     while iteration <= args.max_iter:
         for i, (images, targets, _) in enumerate(train_data_loader):
 
             if iteration > args.max_iter:
                 break
             iteration += 1
+
+            if args.lossy:
+                lossy_images = None
+                for image in images:
+                    lossy_image = image.permute(1,2,0).numpy()
+                    result, lossy_image = cv2.imencode('.jpg', lossy_image, encode_param)
+                    lossy_image = cv2.imdecode(lossy_image, cv2.IMREAD_COLOR)
+                    lossy_image = torch.from_numpy(lossy_image).float().permute(2,0,1).unsqueeze(0)
+                    if lossy_images is None:
+                        lossy_images = lossy_image
+                    else:
+                        lossy_images = torch.cat((lossy_images,lossy_image),0)
+                
+                images = lossy_images.contiguous()
+
             if args.cuda:
                 images = images.cuda(0, non_blocking=True)
                 targets = [anno.cuda(0, non_blocking=True) for anno in targets]

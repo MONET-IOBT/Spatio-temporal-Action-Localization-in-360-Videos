@@ -49,6 +49,7 @@ parser.add_argument('--man_seed', default=123, type=int, help='manualseed for re
 parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
 
+parser.add_argument('--lossy', default=True, type=str2bool, help='Lossy image transmission')
 ## Parse arguments
 args = parser.parse_args()
 ## set random seeds
@@ -78,7 +79,7 @@ def start_streaming():
     val_data_loader = torch.utils.data.DataLoader(val_dataset, 1, num_workers=args.num_workers,
                                  shuffle=False, collate_fn=detection_collate, pin_memory=True)
 
-    num_test_images = 50
+    num_test_images = 150
 
     frames = []
     batch_iterator = None
@@ -106,7 +107,8 @@ def start_streaming():
     
     for frame in frames:
 
-        result, frame = cv2.imencode('.jpg', frame, encode_param)
+        if args.lossy:
+            result, frame = cv2.imencode('.jpg', frame, encode_param)
         data = pickle.dumps(frame, 0)
         size = len(data)
 
