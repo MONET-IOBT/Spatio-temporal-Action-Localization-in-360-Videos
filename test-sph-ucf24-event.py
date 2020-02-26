@@ -304,8 +304,8 @@ def incremental_linking(frames,iouth, gap):
 
 def doFilter(video_result,a,f,nms_thresh):
     scores = video_result[f]['scores'][:,a].squeeze()
-    # c_mask = scores.gt(args.conf_thresh)
-    c_mask = scores.gt(0.001)
+    c_mask = scores.gt(args.conf_thresh)
+    # c_mask = scores.gt(0.001)
     scores = scores[c_mask].squeeze()
     if scores.dim() == 0 or scores.shape[0] == 0:
         return np.array([]),np.array([]),np.array([])
