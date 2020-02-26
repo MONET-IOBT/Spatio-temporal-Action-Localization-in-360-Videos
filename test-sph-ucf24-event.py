@@ -45,8 +45,8 @@ parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to tra
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
-parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -304,8 +304,8 @@ def incremental_linking(frames,iouth, gap):
 
 def doFilter(video_result,a,f,nms_thresh):
     scores = video_result[f]['scores'][:,a].squeeze()
-    c_mask = scores.gt(args.conf_thresh)
-    # c_mask = scores.gt(0.001)
+    # c_mask = scores.gt(args.conf_thresh)
+    c_mask = scores.gt(0.001)
     scores = scores[c_mask].squeeze()
     if scores.dim() == 0 or scores.shape[0] == 0:
         return np.array([]),np.array([]),np.array([])
@@ -342,8 +342,8 @@ def genActionPaths(video_result, a, nms_thresh, iouth,gap):
 
     paths = incremental_linking(action_frames,iouth, gap)
     t3 = time.perf_counter()
-    print('Filter:{:0.3f},'.format(t2 - t1),
-        'linking:{:0.3f}'.format(t3 - t2))
+    # print('Filter:{:0.3f},'.format(t2 - t1),
+    #     'linking:{:0.3f}'.format(t3 - t2))
     return paths
 
 
@@ -665,7 +665,7 @@ def get_PR_curve(annot, xmldata, iouth):
             action_id = gt_tubes[gtind][2] - 1#class
             # if this gt tube is not covered and has the same label as this detected tube
             if (not covered_gt_tubes[gtind]) and dt_label == action_id:
-                gt_fnr = range(gt_tubes[gtind][1][0][0],gt_tubes[gtind][0][0][0]+1)
+                gt_fnr = range(gt_tubes[gtind][0][0][0] - gt_tubes[gtind][1][0][0] + 1)
                 gt_bb = gt_tubes[gtind][3]
                 iou = compute_spatial_temporal_iou(gt_fnr,gt_bb,dt_fnr,dt_bb)
                 if iou > ioumax:
@@ -729,13 +729,28 @@ def evaluate_tubes(outfile):
 
 
 # smooth tubes and evaluate them
-def getTubes(allPath,video_id):
+def getTubes(allPath,video_id,annot_map):
     # read all groundtruth actions
-    # final_annot_location = args.data_root + 'splitfiles/correctedAnnots_test.mat'
     final_annot_location = args.data_root + 'splitfiles/finalAnnots.mat'
     annot = sio.loadmat(final_annot_location)
     annot = annot['annot'][0][video_id]
-    print(annot)
+
+    if args.dataset == 'ucf24':
+        # transform the annotation
+        filename = annot[1][0]
+        if filename in annot_map:
+            for tid,tube in enumerate(annot[2][0]):
+                new_boxes = None
+                for i,old_box in enumerate(tube[3]):
+                    key = (old_box[0],old_box[1],old_box[2],old_box[3])
+                    assert (key in annot_map[filename])
+                    new_box = torch.Tensor(annot_map[filename][key]).unsqueeze(0)
+                    if new_boxes is None:
+                        new_boxes = new_box
+                    else:
+                        new_boxes = torch.cat((new_boxes,new_box),0)
+                annot[2][0][tid][3] = new_boxes
+
     # smooth action path
     alpha = 3
     numActions = len(CLASSES)
@@ -745,7 +760,6 @@ def getTubes(allPath,video_id):
     topk = 40
 
     xmldata = convert2eval(smoothedtubes, min_num_frames, topk)
-    print(xmldata)
 
     # evaluate
     # iouths = [0.2] + [0.5 + 0.05*i for i in range(10)]
@@ -785,7 +799,7 @@ def drawTubes(xmldata,output_dir,frames):
 
             img.save(output_frame_name)
 
-def process_video_result(video_result,outfile,iteration):
+def process_video_result(video_result,outfile,iteration,annot_map):
     frame_det_res = video_result['data']
     videoname = video_result['videoname']
     video_id = video_result['video_id']
@@ -798,11 +812,11 @@ def process_video_result(video_result,outfile,iteration):
     allPath = actionPath(frame_det_res)
 
     t2 = time.perf_counter()
-    res,xmldata = getTubes(allPath,video_id)
+    res,xmldata = getTubes(allPath,video_id,annot_map)
     print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res),"result:",res)
 
     t3 = time.perf_counter()
-    drawTubes(xmldata,output_dir,frames)
+    # drawTubes(xmldata,output_dir,frames)
 
     tf = time.perf_counter()
 
@@ -813,6 +827,12 @@ def process_video_result(video_result,outfile,iteration):
     if video_id>0 and video_id%100 == 0:
         mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
+def update_annot_map(annot_map,old_labels,new_labels,videoname):
+    # record transform
+    for old,new in zip(old_labels,new_labels):
+        old2 = (int(old[0]),int(old[1]),int(old[2]-old[0]),int(old[3]-old[1]))
+        if sum(old2) == 0:continue
+        annot_map[videoname][old2] = [int(new[0]),int(new[1]),int(new[2]),int(new[3])]
 
 def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_classes, outfile, thresh=0.5 ):
     """ Test a SSD network on an Action image database. """
@@ -843,12 +863,8 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     video_result = {}
     video_result['data'] = []
     video_result['frame'] = []
-    original_annot_location = '/home/bo/research/dataset/ucf24/splitfiles/finalAnnots.mat'
-    import scipy.io as sio
-    import copy
-    old_annots = sio.loadmat(original_annot_location)
-    annot = old_annots['annot']
-    template = annot[0][0]
+    import collections
+    annot_map = collections.defaultdict(dict)
     with torch.no_grad():
         for val_itr in range(len(val_data_loader)):
             if not batch_iterator:
@@ -871,7 +887,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                     if lossy_images is None:
                         lossy_images = lossy_image
                     else:
-                        torch.cat((lossy_images,lossy_image),0)
+                        lossy_images = torch.cat((lossy_images,lossy_image),0)
                 images = lossy_images
 
             if args.cuda:
@@ -892,7 +908,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 gt[:, 2] *= width
                 gt[:, 1] *= height
                 gt[:, 3] *= height
-                print(count,gt)
+                # print(gt)
                 gt_boxes.append(gt)
                 decoded_boxes = decode(loc_data[b].data, prior_data.data, args.cfg['variance']).clone()
                 conf_scores = net.softmax(conf_preds[b]).data.clone()
@@ -900,13 +916,14 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 annot_info = image_ids[index]
 
                 frame_num = annot_info[1]; video_id = annot_info[0]; videoname = video_list[video_id]
-                print(videoname,frame_num,index)
+                if args.dataset == 'ucf24':
+                    update_annot_map(annot_map,image_ids[index][3],gt,videoname)
                 # check if this id is different from the previous one
                 if (video_id != pre_video_id) and (len(video_result['data']) > 0):
                     # process this video
                     video_result['videoname'] = video_list[pre_video_id]
                     video_result['video_id'] = pre_video_id
-                    process_video_result(video_result,outfile,iteration)
+                    process_video_result(video_result,outfile,iteration,annot_map)
                     video_result['data'] = []
                     video_result['frame'] = []
                 pre_video_id = video_id
@@ -955,7 +972,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 print('NMS stuff Time {:0.3f}'.format(te - tf))
         if (len(video_result['data']) > 0):
             # process this video
-            process_video_result(video_result,outfile,iteration)
+            process_video_result(video_result,outfile,iteration,annot_map)
     print('Evaluate tubes:')
     mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
