@@ -170,7 +170,7 @@ class OmniDataset(data.Dataset):
         self.video_list = dataset.video_list
         self.ids = dataset.ids
         self.root = dataset.root
-        self.user = '/home/bo/'
+        self.user = '/home/monet/'
 
         self.aug = None
         if fix_aug:
@@ -373,7 +373,6 @@ class OmniDataset(data.Dataset):
             img_ch = torch.FloatTensor(_img.copy())
             img_stack.append(img_ch.unsqueeze(0))
         img = torch.cat(img_stack, dim=0)
-
         new_labels = self._transform_label(label,x, y)
 
         return img, new_labels, index

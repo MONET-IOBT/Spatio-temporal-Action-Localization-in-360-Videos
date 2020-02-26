@@ -53,7 +53,7 @@ parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshol
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
 parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or ktn')
 parser.add_argument('--data_type', default='3d', help='2d or 3d')
-parser.add_argument('--lossy', default=True, type=str2bool, help='Lossy image transmission')
+parser.add_argument('--lossy', default=False, type=str2bool, help='Lossy image transmission')
 
 args = parser.parse_args()
 all_versions = [v1,v2,v3,v4,v5]
@@ -731,10 +731,11 @@ def evaluate_tubes(outfile):
 # smooth tubes and evaluate them
 def getTubes(allPath,video_id):
     # read all groundtruth actions
-    final_annot_location = args.data_root + 'splitfiles/correctedAnnots_test.mat'
+    # final_annot_location = args.data_root + 'splitfiles/correctedAnnots_test.mat'
+    final_annot_location = args.data_root + 'splitfiles/finalAnnots.mat'
     annot = sio.loadmat(final_annot_location)
     annot = annot['annot'][0][video_id]
-    # need to load annot of jhmdb
+    print(annot)
     # smooth action path
     alpha = 3
     numActions = len(CLASSES)
@@ -744,6 +745,7 @@ def getTubes(allPath,video_id):
     topk = 40
 
     xmldata = convert2eval(smoothedtubes, min_num_frames, topk)
+    print(xmldata)
 
     # evaluate
     # iouths = [0.2] + [0.5 + 0.05*i for i in range(10)]
@@ -797,7 +799,6 @@ def process_video_result(video_result,outfile,iteration):
 
     t2 = time.perf_counter()
     res,xmldata = getTubes(allPath,video_id)
-    print(xmldata)
     print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res),"result:",res)
 
     t3 = time.perf_counter()
@@ -842,6 +843,12 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     video_result = {}
     video_result['data'] = []
     video_result['frame'] = []
+    original_annot_location = '/home/bo/research/dataset/ucf24/splitfiles/finalAnnots.mat'
+    import scipy.io as sio
+    import copy
+    old_annots = sio.loadmat(original_annot_location)
+    annot = old_annots['annot']
+    template = annot[0][0]
     with torch.no_grad():
         for val_itr in range(len(val_data_loader)):
             if not batch_iterator:
@@ -885,6 +892,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 gt[:, 2] *= width
                 gt[:, 1] *= height
                 gt[:, 3] *= height
+                print(count,gt)
                 gt_boxes.append(gt)
                 decoded_boxes = decode(loc_data[b].data, prior_data.data, args.cfg['variance']).clone()
                 conf_scores = net.softmax(conf_preds[b]).data.clone()
@@ -892,6 +900,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 annot_info = image_ids[index]
 
                 frame_num = annot_info[1]; video_id = annot_info[0]; videoname = video_list[video_id]
+                print(videoname,frame_num,index)
                 # check if this id is different from the previous one
                 if (video_id != pre_video_id) and (len(video_result['data']) > 0):
                     # process this video
