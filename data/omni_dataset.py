@@ -172,7 +172,7 @@ class OmniDataset(data.Dataset):
         self.ids = dataset.ids
         self.root = dataset.root
         # self.annot_map = collections.defaultdict(dict)
-        self.user = '/home/picocluster/'
+        self.user = '/home/monet/'
 
         self.aug = None
         if fix_aug:
@@ -331,8 +331,8 @@ class OmniDataset(data.Dataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        img, label, index, old_label = self._transform_item(idx)
-        return img, label, index, old_label
+        img, label, index = self._transform_item(idx)
+        return img, label, index
 
     def _transform_item(self, idx):
         annot_info = self.ids[idx]
@@ -380,9 +380,7 @@ class OmniDataset(data.Dataset):
         img = torch.cat(img_stack, dim=0)
         new_labels = self._transform_label(label,x, y)
 
-        old_labels = self.ids[idx][3]
-
-        return img, new_labels, index, old_labels
+        return img, new_labels, index
 
     def _transform_label(self, bboxes, x, y):
         new_labels = []

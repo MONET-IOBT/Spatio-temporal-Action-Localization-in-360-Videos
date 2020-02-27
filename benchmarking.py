@@ -11,13 +11,12 @@
 import torch
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
-from data import AnnotationTransform, UCF24Detection, BaseTransform, CLASSES, detection_collate
-from data import v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13
+from data import AnnotationTransform, UCF24Detection, BaseTransform, UCF24_CLASSES, JHMDB_CLASSES, detection_collate
+from data import v1,v2,v3,v4,v5
 from model.sph_ssd import build_vgg_ssd
 from model.fpnssd.net import FPNSSD512
 from model.vggssd.net import SSD512
 from model.mobile_ssd_v1.net import MobileSSD512
-from model.mobile_ssd_v2.net import MobileSSDLite300V2
 from model.mobile_fpnssd.net import MobileFPNSSD512
 import torch.utils.data as data
 from layers.sph_box_utils import decode, nms
@@ -32,7 +31,7 @@ def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='v1', help='The version of config')
+parser.add_argument('--version', default='2', help='The version of config')
 parser.add_argument('--basenet', default='fpn_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
@@ -57,7 +56,7 @@ parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or kt
 
 
 args = parser.parse_args()
-all_versions = [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13]
+all_versions = [v1,v2,v3,v4,v5]
 args.cfg = all_versions[int(args.version[-1])-1]
 args.outshape = args.cfg['min_dim']
 np.random.seed(args.man_seed)
@@ -74,6 +73,7 @@ if args.cuda and torch.cuda.is_available():
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
+CLASSES = UCF24_CLASSES if args.dataset == 'ucf24' else JHMDB_CLASSES
 
 def test_net(net, save_root, exp_name, input_type, iteration, num_classes, thresh=0.5 ):
     """ Test a SSD network on an Action image database. """
@@ -102,8 +102,8 @@ def main():
 
     means = (104, 117, 123)  # only support voc now
 
-    exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}-{}'.format(args.net_type, args.dataset,
-                args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000), args.cfg['name'])
+    exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}'.format(args.net_type, args.dataset,
+                args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000))
 
     args.save_root += args.dataset+'/'
     args.listid = '01' ## would be usefull in JHMDB-21
@@ -128,8 +128,6 @@ def main():
                 net.conf.apply(weights_init)
         elif args.cfg['base'] == 'mobile_v1_512':
             net = MobileSSD512(num_classes, args.cfg)
-        elif args.cfg['base'] == 'mobile_v2_300_lite':
-            net = MobileSSDLite300V2(num_classes, args.cfg)
         elif args.cfg['base'] == 'fpn_mobile_512':
             net = MobileFPNSSD512(num_classes, args.cfg)
         elif args.cfg['base'] == 'yolov3':
