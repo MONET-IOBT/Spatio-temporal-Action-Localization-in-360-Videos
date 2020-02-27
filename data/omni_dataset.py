@@ -172,7 +172,7 @@ class OmniDataset(data.Dataset):
         self.ids = dataset.ids
         self.root = dataset.root
         # self.annot_map = collections.defaultdict(dict)
-        self.user = '/home/monet/'
+        self.user = '/home/picocluster/'
 
         self.aug = None
         if fix_aug:
