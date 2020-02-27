@@ -820,10 +820,10 @@ def process_video_result(video_result,outfile,iteration,annot_map):
 
     tf = time.perf_counter()
 
-    # print('Gen path {:0.3f}'.format(t2 - t1),
-    #     ', gen tubes {:0.3f}'.format(t3 - t2),
-    #     ', draw tubes {:0.3f}'.format(tf - t3),
-    #     ', total time {:0.3f}'.format(tf - t1))
+    print('Gen path {:0.3f}'.format(t2 - t1),
+        ', gen tubes {:0.3f}'.format(t3 - t2),
+        ', draw tubes {:0.3f}'.format(tf - t3),
+        ', total time {:0.3f}'.format(tf - t1))
     if video_id>0 and video_id%100 == 0:
         mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
@@ -841,7 +841,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                             shuffle=False, collate_fn=detection_collate, pin_memory=True)
     image_ids = dataset.ids
     save_ids = []
-    val_step = 250
+    val_step = 1#250
     num_images = len(dataset)
     video_list = dataset.video_list
     det_boxes = [[] for _ in range(len(CLASSES))]
