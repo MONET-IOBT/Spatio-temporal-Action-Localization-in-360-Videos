@@ -25,6 +25,7 @@ import numpy as np
 import pickle
 import scipy.io as sio # to save detection as mat files
 from PIL import ImageDraw,Image
+import cv2
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -52,7 +53,6 @@ parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence 
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
 parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or ktn')
-parser.add_argument('--data_type', default='3d', help='2d or 3d')
 parser.add_argument('--lossy', default=False, type=str2bool, help='Lossy image transmission')
 
 args = parser.parse_args()
@@ -820,10 +820,10 @@ def process_video_result(video_result,outfile,iteration,annot_map):
 
     tf = time.perf_counter()
 
-    print('Gen path {:0.3f}'.format(t2 - t1),
-        ', gen tubes {:0.3f}'.format(t3 - t2),
-        ', draw tubes {:0.3f}'.format(tf - t3),
-        ', total time {:0.3f}'.format(tf - t1))
+    # print('Gen path {:0.3f}'.format(t2 - t1),
+    #     ', gen tubes {:0.3f}'.format(t3 - t2),
+    #     ', draw tubes {:0.3f}'.format(tf - t3),
+    #     ', total time {:0.3f}'.format(tf - t1))
     if video_id>0 and video_id%100 == 0:
         mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
@@ -865,6 +865,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     video_result['frame'] = []
     import collections
     annot_map = collections.defaultdict(dict)
+    encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
     with torch.no_grad():
         for val_itr in range(len(val_data_loader)):
             if not batch_iterator:
@@ -989,7 +990,7 @@ def main():
 
     args.means = (104, 117, 123)  # only support voc now
 
-    exp_name = '{}-SSD-{}-{}-{}-bs-{}-{}-lr-{:05d}'.format(args.net_type, args.data_type, args.dataset,
+    exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}'.format(args.net_type, args.dataset,
                 args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000))
 
     args.save_root += args.dataset+'/'
@@ -1016,23 +1017,12 @@ def main():
             cudnn.benchmark = True
         print('Finished loading model %d !' % iteration)
         # Load dataset
-        if args.data_type == '2d':
-            if args.dataset == 'ucf24':
-                dataset = UCF24Detection(args.data_root, 'test', BaseTransform(300, args.means),
-                                             AnnotationTransform(), input_type=args.input_type,
-                                             full_test=True)
-            else:
-                dataset = JHMDB(args.data_root, 'test', BaseTransform(300, None), 
-                                        AnnotationTransform(), split=1)
-        elif args.data_type == '3d':
-            if args.dataset == 'ucf24':
-                dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
-                                        input_type=args.input_type, outshape=args.outshape, full_test=True)
-            else:
-                dataset = OmniJHMDB(args.data_root, 'test', BaseTransform(300, None), AnnotationTransform(), 
-                                    outshape=args.outshape)
+        if args.dataset == 'ucf24':
+            dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
+                                    input_type=args.input_type, outshape=args.outshape, full_test=True)
         else:
-            exit(0)
+            dataset = OmniJHMDB(args.data_root, 'test', BaseTransform(300, None), AnnotationTransform(), 
+                                outshape=args.outshape)
 
         # evaluation
         torch.cuda.synchronize()

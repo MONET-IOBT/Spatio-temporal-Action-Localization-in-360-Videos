@@ -12,7 +12,7 @@ import torch
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
 from data.omni_dataset import OmniUCF24
-from data import AnnotationTransform, UCF24Detection, BaseTransform, CLASSES, detection_collate, v1,v2,v3,v4,v5,v6
+from data import AnnotationTransform, UCF24Detection, BaseTransform, UCF24_CLASSES, JHMDB_CLASSES, detection_collate, v1,v2,v3,v4,v5
 from model.fpnssd.net import FPNSSD512
 from model.sph_ssd import build_vgg_ssd
 from model.vggssd.net import SSD512
@@ -25,11 +25,12 @@ import numpy as np
 import pickle
 import scipy.io as sio # to save detection as mat files
 
+
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='v6', help='The version of config')
+parser.add_argument('--version', default='2', help='The version of config')
 parser.add_argument('--basenet', default='fpn_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
@@ -44,8 +45,8 @@ parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to tra
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
-parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -54,7 +55,7 @@ parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or kt
 
 
 args = parser.parse_args()
-all_versions = [v1,v2,v3,v4,v5,v6]
+all_versions = [v1,v2,v3,v4,v5]
 args.cfg = all_versions[int(args.version[-1])-1]
 args.outshape = args.cfg['min_dim']
 np.random.seed(args.man_seed)
@@ -71,6 +72,8 @@ if args.cuda and torch.cuda.is_available():
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
+
+CLASSES = UCF24_CLASSES if args.dataset == 'ucf24' else JHMDB_CLASSES
 
 def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_classes, thresh=0.5 ):
     """ Test a SSD network on an Action image database. """
@@ -186,10 +189,10 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
 
 def main():
 
-    means = (104, 117, 123)  # only support voc now
+    args.means = (104, 117, 123)  # only support voc now
 
-    exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}-{}'.format(args.net_type, args.dataset,
-                args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000), args.cfg['name'])
+    exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}'.format(args.net_type, args.dataset,
+                args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000))
 
     args.save_root += args.dataset+'/'
     args.data_root += args.dataset+'/'
@@ -215,9 +218,8 @@ def main():
             cudnn.benchmark = True
         print('Finished loading model %d !' % iteration)
         # Load dataset
-        dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, means), AnnotationTransform(), 
-                            cfg=args.cfg, input_type=args.input_type, 
-                            outshape=args.outshape, full_test=True)
+        dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
+                                        input_type=args.input_type, outshape=args.outshape, full_test=True)
         # evaluation
         torch.cuda.synchronize()
         tt0 = time.perf_counter()
