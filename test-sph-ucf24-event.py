@@ -918,23 +918,23 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
 
                 frame_num = annot_info[1]; video_id = annot_info[0]; videoname = video_list[video_id]
                 # check if this id is different from the previous one
-                if (video_id != pre_video_id) and (len(video_result['data']) > 0):
-                    # process this video
-                    video_result['videoname'] = video_list[pre_video_id]
-                    video_result['video_id'] = pre_video_id
-                    process_video_result(video_result,outfile,iteration,annot_map)
-                    annot_map = {}
-                    video_result['data'] = []
-                    video_result['frame'] = []
-                if args.dataset == 'ucf24':
-                    update_annot_map(annot_map,image_ids[index][3],gt)
-                pre_video_id = video_id
+                # if (video_id != pre_video_id) and (len(video_result['data']) > 0):
+                #     # process this video
+                #     video_result['videoname'] = video_list[pre_video_id]
+                #     video_result['video_id'] = pre_video_id
+                #     process_video_result(video_result,outfile,iteration,annot_map)
+                #     annot_map = {}
+                #     video_result['data'] = []
+                #     video_result['frame'] = []
+                # if args.dataset == 'ucf24':
+                #     update_annot_map(annot_map,image_ids[index][3],gt)
+                # pre_video_id = video_id
 
-                res = {}
-                res['scores'] = conf_scores
-                res['boxes'] = decoded_boxes
-                video_result['data'].append(res)
-                video_result['frame'].append(images[b])
+                # res = {}
+                # res['scores'] = conf_scores
+                # res['boxes'] = decoded_boxes
+                # video_result['data'].append(res)
+                # video_result['frame'].append(images[b])
 
                 for cl_ind in range(1, num_classes):
                     scores = conf_scores[:, cl_ind].squeeze()
@@ -972,11 +972,11 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 torch.cuda.synchronize()
                 te = time.perf_counter()
                 print('NMS stuff Time {:0.3f}'.format(te - tf))
-        if (len(video_result['data']) > 0):
-            # process this video
-            process_video_result(video_result,outfile,iteration,annot_map)
-    print('Evaluate tubes:')
-    mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
+        # if (len(video_result['data']) > 0):
+        #     # process this video
+        #     process_video_result(video_result,outfile,iteration,annot_map)
+    # print('Evaluate tubes:')
+    # mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
     print('Evaluating detections for itration number ', iteration)
 
