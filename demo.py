@@ -924,6 +924,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 annot_info = image_ids[index]
 
                 frame_num = annot_info[1]; video_id = annot_info[0]; videoname = video_list[video_id]
+                print(videoname,frame_num)
                 # check if this id is different from the previous one
                 if (video_id != pre_video_id) and (len(video_result['data']) > 0):
                     # process this video
