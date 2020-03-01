@@ -918,8 +918,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
             conf_preds = output[1]
             prior_data = output[2]
             tf = time.perf_counter()
-            print('Forward Time {:0.3f}'.format(tf - t1))
-            continue
+            print('Forward Time {:0.3f}'.format(tf - t1),b)
 
             for b in range(batch_size):
                 gt = targets[b].numpy()
