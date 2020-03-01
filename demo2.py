@@ -849,8 +849,8 @@ def update_annot_map(annot_map,old_labels,new_labels):
 def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_classes, outfile, thresh=0.5 ):
     """ Test a SSD network on an Action image database. """
 
-    val_data_loader = data.DataLoader(dataset, 1, num_workers=args.num_workers,
-                            shuffle=False, collate_fn=detection_collate, pin_memory=True)
+    # val_data_loader = data.DataLoader(dataset, 1, num_workers=args.num_workers,
+    #                         shuffle=False, collate_fn=detection_collate, pin_memory=True)
     image_ids = dataset.ids
     save_ids = []
     val_step = 250
@@ -863,7 +863,6 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     count = 0
     torch.cuda.synchronize()
     ts = time.perf_counter()
-    # num_batches = len(val_data_loader)
     num_batches = len(dataset)
     det_file = save_root + 'cache/' + exp_name + '/detection-'+str(iteration).zfill(6)+'.pkl'
     frame_save_dir = save_root+'detections/CONV-'+input_type+'-'+args.listid+'-'+str(iteration).zfill(6)+'/'
@@ -885,13 +884,16 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     frame_level_time = 0
     frame_level_cnt = 0
     with torch.no_grad():
-        for val_itr in range(len(val_data_loader)):
-            if not batch_iterator:
-                batch_iterator = iter(val_data_loader)
+        val_itr = 0
+        while True:
 
             torch.cuda.synchronize()
 
-            images, targets, img_indexs = next(batch_iterator)
+            image, target, img_index = dataset[val_itr]
+
+            images = torch.stack([image], 0)
+            targets = [torch.FloatTensor(target)]
+            img_indexs = [img_index]
 
             batch_size = images.size(0)
             height, width = images.size(2), images.size(3)
@@ -946,6 +948,16 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 video_result['frame'].append(images[b])
 
                 count += 1
+
+            val_itr = (val_itr+1)%num_batches
+            if val_itr == 0:
+                pre_video_id = -1
+                video_result = {}
+                video_result['data'] = []
+                video_result['frame'] = []
+                annot_map = {}
+                frame_level_time = 0
+                frame_level_cnt = 0
     return
 
 
