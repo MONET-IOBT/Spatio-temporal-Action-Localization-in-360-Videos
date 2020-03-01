@@ -24,7 +24,7 @@ import argparse
 import numpy as np
 import pickle
 import scipy.io as sio # to save detection as mat files
-from PIL import ImageDraw,Image
+from PIL import ImageDraw,Image,ImageFont
 import cv2
 import socket
 import struct
@@ -49,14 +49,15 @@ parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to tra
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
-parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/picocluster/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/picocluster/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
 parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or ktn')
 parser.add_argument('--lossy', default=False, type=str2bool, help='Lossy image transmission')
+parser.add_argument('--cache_size', default=150, type=int, help='cache size')
 
 args = parser.parse_args()
 all_versions = [v1,v2,v3,v4,v5]
@@ -740,20 +741,18 @@ def getTubes(allPath,video_id,annot_map):
 
     if args.dataset == 'ucf24':
         # transform the annotation
-        filename = annot[1][0]
-        if filename in annot_map:
-            for tid,tube in enumerate(annot[2][0]):
-                new_boxes = None
-                for i,old_box in enumerate(tube[3]):
-                    key = (old_box[0],old_box[1],old_box[2],old_box[3])
-                    if key not in annot_map[filename]:
-                        exit(0)
-                    new_box = torch.Tensor(annot_map[filename][key]).unsqueeze(0)
-                    if new_boxes is None:
-                        new_boxes = new_box
-                    else:
-                        new_boxes = torch.cat((new_boxes,new_box),0)
-                annot[2][0][tid][3] = new_boxes
+        for tid,tube in enumerate(annot[2][0]):
+            new_boxes = None
+            for i,old_box in enumerate(tube[3]):
+                key = (old_box[0],old_box[1],old_box[2],old_box[3])
+                if key not in annot_map:
+                    exit(0)
+                new_box = torch.Tensor(annot_map[key]).unsqueeze(0)
+                if new_boxes is None:
+                    new_boxes = new_box
+                else:
+                    new_boxes = torch.cat((new_boxes,new_box),0)
+            annot[2][0][tid][3] = new_boxes
 
     # smooth action path
     alpha = 3
@@ -796,6 +795,8 @@ def drawTubes(xmldata,output_dir,frames,gt_label):
             draw = ImageDraw.Draw(img)
             x1,y1,x2,y2 = bb
             draw.rectangle(((x1, y1), (x2, y2)), fill=None, outline ="red")
+            ft = ImageFont.truetype("/usr/share/fonts/truetype/freefont/FreeMono.ttf", 26)
+            draw.text((x1, y1),CLASSES[dt_label],(255,255,255),font=ft)
 
             npimg = np.array(img)
 
@@ -822,17 +823,20 @@ def process_video_result(video_result,outfile,iteration,annot_map):
 
     tmp,xmldata = getTubes(allPath,video_id,annot_map)
     res,gt_label = tmp
-    print("Detecting event:",videoname,'success' if res else 'failure',
-        'total time {:0.3f}, time per frame {:0.3f}'.format(tf - t1,(tf-t1)/len(frame_det_res)))
+    drawTubes(xmldata,output_dir,frames,gt_label)
+    tf = time.perf_counter()
+    print("Detecting event:",videoname,
+        'total time {:0.3f}, time per frame {:0.3f}'.format(tf - t1,(tf-t1)/len(frame_det_res)),
+        'Success' if res else 'Failure')
     # if video_id>0 and video_id%100 == 0:
     #     mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
-def update_annot_map(annot_map,old_labels,new_labels,videoname):
+def update_annot_map(annot_map,old_labels,new_labels):
     # record transform
     for old,new in zip(old_labels,new_labels):
         old2 = (int(old[0]),int(old[1]),int(old[2]-old[0]),int(old[3]-old[1]))
         if sum(old2) == 0:continue
-        annot_map[videoname][old2] = [int(new[0]),int(new[1]),int(new[2]),int(new[3])]
+        annot_map[old2] = [int(new[0]),int(new[1]),int(new[2]),int(new[3])]
 
 def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_classes, outfile, thresh=0.5 ):
     """ Test a SSD network on an Action image database. """
@@ -857,11 +861,19 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     frame_save_dir = save_root+'detections/CONV-'+input_type+'-'+args.listid+'-'+str(iteration).zfill(6)+'/'
 
     print('Caching dataset...')
-    cache_size = 500
+    cache_size = args.cache_size
     cached_data = []
     for i in range(cache_size):
         cached_data.append(dataset[i])
+        if i>0 and i%(cache_size/10)==0:
+            print(i/cache_size*100,'%')
     print('Data cached')
+
+    # connect to server
+    args.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    args.client_socket.connect(('127.0.0.1', 8485))
+    connection = args.client_socket.makefile('wb')
+    print('Connected.')
 
     # id identify diffferent video segments
     pre_video_id = -1
@@ -869,8 +881,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     video_result = {}
     video_result['data'] = []
     video_result['frame'] = []
-    import collections
-    annot_map = collections.defaultdict(dict)
+    annot_map = {}
     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
     tube_t_s = time.perf_counter()
     with torch.no_grad():
@@ -913,8 +924,6 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 annot_info = image_ids[index]
 
                 frame_num = annot_info[1]; video_id = annot_info[0]; videoname = video_list[video_id]
-                if args.dataset == 'ucf24':
-                    update_annot_map(annot_map,image_ids[index][3],gt,videoname)
                 # check if this id is different from the previous one
                 if (video_id != pre_video_id) and (len(video_result['data']) > 0):
                     # process this video
@@ -924,9 +933,12 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                     fps = len(video_result['frame'])/(tube_t_e - tube_t_s)
                     print("Frame-level detection FPS:",fps)
                     process_video_result(video_result,outfile,iteration,annot_map)
+                    annot_map = {}
                     tube_t_s = time.perf_counter()
                     video_result['data'] = []
                     video_result['frame'] = []
+                if args.dataset == 'ucf24':
+                    update_annot_map(annot_map,image_ids[index][3],gt)
                 pre_video_id = video_id
 
                 res = {}
@@ -938,6 +950,14 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 count += 1
 
             val_itr = (val_itr+1)%len(cached_data)
+            if val_itr == 0:
+                pre_video_id = -1
+                video_result = {}
+                video_result['data'] = []
+                video_result['frame'] = []
+                annot_map = {}
+                tube_t_s = time.perf_counter()
+
     return
 
 
@@ -953,11 +973,6 @@ def main():
     args.listid = '01' ## would be usefull in JHMDB-21
     print('Exp name', exp_name, args.listid)
 
-    # connect to server
-    args.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    args.client_socket.connect(('127.0.0.1', 8485))
-    connection = args.client_socket.makefile('wb')
-    print('Connected.')
     # 
     for iteration in [int(itr) for itr in args.eval_iter.split(',') if len(itr)>0]:
         log_file = open(args.save_root + 'cache/' + exp_name + "/testing-{:d}-{:0.2f}.log".format(iteration,args.iou_thresh), "w", 1)

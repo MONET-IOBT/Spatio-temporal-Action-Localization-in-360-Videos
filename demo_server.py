@@ -7,8 +7,18 @@ import struct ## new
 import zlib
 import pickle,os
 import numpy as np
+import argparse
 from data import UCF24_CLASSES
+import matplotlib.pyplot as plt
 CLASSES = UCF24_CLASSES 
+
+def str2bool(v):
+    return v.lower() in ("yes", "true", "t", "1")
+
+parser = argparse.ArgumentParser(description='Demo Server')
+parser.add_argument('--showImage', default=True, type=str2bool, help='Show event detection image')
+
+args = parser.parse_args()
 
 if __name__ == '__main__':
 	HOST=''
@@ -27,7 +37,7 @@ if __name__ == '__main__':
 	data = b""
 	payload_size = struct.calcsize(">L")
 
-	output_dir = '/home/bo/research/dataset/ucf24/detections'
+	output_dir = '/home/picocluster/research/dataset/ucf24/detections'
 	if not os.path.isdir(output_dir):
 		os.makedirs(output_dir)
 	dtind = 0
@@ -70,5 +80,12 @@ if __name__ == '__main__':
 		img = Image.fromarray(frame.astype(np.uint8))
 		img.save(output_tube_dir)
 
-		print('Event detected:',CLASSES[class_label],'(',CLASSES[gt_label],')\n',
-			'-image saved in:',output_tube_dir)
+		print('Event detected:',CLASSES[class_label],'(',CLASSES[gt_label],')',
+        				'Success' if class_label==gt_label else 'Failure')
+		
+		if args.showImage:
+			b,g,r = cv2.split(frame)
+			frame_rgb = cv2.merge((r,g,b))
+
+			cv2.imshow('Event detection result',frame_rgb)
+			cv2.waitKey(1)
