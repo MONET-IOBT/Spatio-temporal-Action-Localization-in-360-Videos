@@ -919,7 +919,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
             prior_data = output[2]
             tf = time.perf_counter()
             print('Forward Time {:0.3f}'.format(tf - t1),batch_size)
-            frame_level_time += (tf-f1)
+            frame_level_time += (tf-t1)
             frame_level_cnt += 1
 
             for b in range(batch_size):
