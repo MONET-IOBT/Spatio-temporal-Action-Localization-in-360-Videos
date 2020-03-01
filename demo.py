@@ -891,7 +891,8 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     video_result['frame'] = []
     annot_map = {}
     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
-    tube_t_s = time.perf_counter()
+    frame_level_time = 0
+    frame_level_cnt = 0
     with torch.no_grad():
         val_itr = 0
         while True:
@@ -899,7 +900,6 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
             torch.cuda.synchronize()
 
             image, target, img_index = cached_data[val_itr]
-            print(val_itr)
 
             images = torch.stack([image], 0)
             targets = [torch.FloatTensor(target)]
@@ -919,8 +919,11 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
             prior_data = output[2]
             tf = time.perf_counter()
             print('Forward Time {:0.3f}'.format(tf - t1),batch_size)
+            frame_level_time += (tf-f1)
+            frame_level_cnt += 1
 
             for b in range(batch_size):
+                t1 = time.perf_counter()
                 gt = targets[b].numpy()
                 gt[:, 0] *= width
                 gt[:, 2] *= width
@@ -934,17 +937,17 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 annot_info = image_ids[index]
 
                 frame_num = annot_info[1]; video_id = annot_info[0]; videoname = video_list[video_id]
+                tf = time.perf_counter()
+                print('Decode Time {:0.3f}'.format(tf - t1))
                 # check if this id is different from the previous one
                 if (video_id != pre_video_id) and (len(video_result['data']) > 0):
                     # process this video
                     video_result['videoname'] = video_list[pre_video_id]
                     video_result['video_id'] = pre_video_id
-                    tube_t_e = time.perf_counter()
-                    fps = len(video_result['frame'])/(tube_t_e - tube_t_s)
+                    fps = frame_level_cnt/frame_level_time
                     print("Frame-level detection FPS:",fps)
                     process_video_result(video_result,outfile,iteration,annot_map)
                     annot_map = {}
-                    tube_t_s = time.perf_counter()
                     video_result['data'] = []
                     video_result['frame'] = []
                 if args.dataset == 'ucf24':
@@ -966,7 +969,8 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 video_result['data'] = []
                 video_result['frame'] = []
                 annot_map = {}
-                tube_t_s = time.perf_counter()
+                frame_level_time = 0
+                frame_level_cnt = 0
 
     return
 
