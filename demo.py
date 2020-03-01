@@ -899,6 +899,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
             torch.cuda.synchronize()
 
             image, target, img_index = cached_data[val_itr]
+            print(val_itr)
 
             images = torch.stack([image], 0)
             targets = [torch.FloatTensor(target)]
