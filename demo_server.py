@@ -43,7 +43,6 @@ if __name__ == '__main__':
 	dtind = 0
 
 	while True:
-		print("listening")
 		while len(data) < payload_size:
 			data += conn.recv(4096)
 

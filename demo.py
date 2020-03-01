@@ -918,6 +918,8 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
             conf_preds = output[1]
             prior_data = output[2]
             tf = time.perf_counter()
+            print('Forward Time {:0.3f}'.format(tf - t1))
+            continue
 
             for b in range(batch_size):
                 gt = targets[b].numpy()
@@ -933,7 +935,6 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 annot_info = image_ids[index]
 
                 frame_num = annot_info[1]; video_id = annot_info[0]; videoname = video_list[video_id]
-                print(videoname,index)
                 # check if this id is different from the previous one
                 if (video_id != pre_video_id) and (len(video_result['data']) > 0):
                     # process this video
