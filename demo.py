@@ -817,7 +817,7 @@ def process_video_result(video_result,outfile,iteration,annot_map):
 
     frame_save_dir = args.save_root+'detections/CONV-rgb-'+args.listid+'-'+str(iteration).zfill(6)+'/'
     output_dir = frame_save_dir+videoname
-    print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res),"result:",res)
+    print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res))
 
     t1 = time.perf_counter()
     allPath = actionPath(frame_det_res)
