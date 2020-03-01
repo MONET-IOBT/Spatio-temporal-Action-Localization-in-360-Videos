@@ -37,7 +37,7 @@ parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
 parser.add_argument('--input_type', default='rgb', type=str, help='INput tyep default rgb can take flow as well')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
-parser.add_argument('--batch_size', default=4, type=int, help='Batch size for training')
+parser.add_argument('--batch_size', default=2, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
 parser.add_argument('--num_workers', default=1, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--eval_iter', default='150000,', type=str, help='Number of training iterations')
@@ -737,19 +737,17 @@ def getTubes(allPath,video_id,annot_map):
 
     if args.dataset == 'ucf24':
         # transform the annotation
-        filename = annot[1][0]
-        if filename in annot_map:
-            for tid,tube in enumerate(annot[2][0]):
-                new_boxes = None
-                for i,old_box in enumerate(tube[3]):
-                    key = (old_box[0],old_box[1],old_box[2],old_box[3])
-                    assert (key in annot_map[filename])
-                    new_box = torch.Tensor(annot_map[filename][key]).unsqueeze(0)
-                    if new_boxes is None:
-                        new_boxes = new_box
-                    else:
-                        new_boxes = torch.cat((new_boxes,new_box),0)
-                annot[2][0][tid][3] = new_boxes
+        for tid,tube in enumerate(annot[2][0]):
+            new_boxes = None
+            for i,old_box in enumerate(tube[3]):
+                key = (old_box[0],old_box[1],old_box[2],old_box[3])
+                assert (key in annot_map)
+                new_box = torch.Tensor(annot_map[key]).unsqueeze(0)
+                if new_boxes is None:
+                    new_boxes = new_box
+                else:
+                    new_boxes = torch.cat((new_boxes,new_box),0)
+            annot[2][0][tid][3] = new_boxes
 
     # smooth action path
     alpha = 3
@@ -784,7 +782,7 @@ def drawTubes(xmldata,output_dir,frames):
         dt_label = dt_labels[dtind] - 1
         assert(dt_label>=0)
 
-        output_tube_dir = output_dir + '/tube-' + str(dtind) + '/class-' + str(dt_label)
+        output_tube_dir = output_dir + '/tube-' + str(dtind) + '/' + CLASSES[dt_label]
         if not os.path.isdir(output_tube_dir):
             os.makedirs(output_tube_dir)
 
@@ -827,12 +825,12 @@ def process_video_result(video_result,outfile,iteration,annot_map):
     if video_id>0 and video_id%100 == 0:
         mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
-def update_annot_map(annot_map,old_labels,new_labels,videoname):
+def update_annot_map(annot_map,old_labels,new_labels):
     # record transform
     for old,new in zip(old_labels,new_labels):
         old2 = (int(old[0]),int(old[1]),int(old[2]-old[0]),int(old[3]-old[1]))
         if sum(old2) == 0:continue
-        annot_map[videoname][old2] = [int(new[0]),int(new[1]),int(new[2]),int(new[3])]
+        annot_map[old2] = [int(new[0]),int(new[1]),int(new[2]),int(new[3])]
 
 def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_classes, outfile, thresh=0.5 ):
     """ Test a SSD network on an Action image database. """
@@ -919,18 +917,17 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 annot_info = image_ids[index]
 
                 frame_num = annot_info[1]; video_id = annot_info[0]; videoname = video_list[video_id]
-                if args.dataset == 'ucf24':
-                    update_annot_map(annot_map,image_ids[index][3],gt,videoname)
                 # check if this id is different from the previous one
                 if (video_id != pre_video_id) and (len(video_result['data']) > 0):
                     # process this video
                     video_result['videoname'] = video_list[pre_video_id]
                     video_result['video_id'] = pre_video_id
                     process_video_result(video_result,outfile,iteration,annot_map)
-                    if args.dataset == 'ucf24':
-                        del annot_map[video_list[pre_video_id]]
+                    annot_map = {}
                     video_result['data'] = []
                     video_result['frame'] = []
+                if args.dataset == 'ucf24':
+                    update_annot_map(annot_map,image_ids[index][3],gt)
                 pre_video_id = video_id
 
                 res = {}
@@ -995,7 +992,7 @@ def main():
     args.means = (104, 117, 123)  # only support voc now
 
     exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}'.format(args.net_type, args.dataset,
-                args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000))
+                args.input_type, 4, args.cfg['base'], int(args.lr*100000))
 
     args.save_root += args.dataset+'/'
     args.data_root += args.dataset+'/'

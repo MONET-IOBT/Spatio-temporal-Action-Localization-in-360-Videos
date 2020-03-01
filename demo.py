@@ -26,6 +26,9 @@ import pickle
 import scipy.io as sio # to save detection as mat files
 from PIL import ImageDraw,Image
 import cv2
+import socket
+import struct
+import zlib
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -683,7 +686,7 @@ def get_PR_curve(annot, xmldata, iouth):
             allscore[dt_label][cc[dt_label],:] = [dt_tubes['score'][dtind],0]
     preds.append(pred)
     gts.append(gt)
-    return pred == gt
+    return pred == gt,gt
 
 def evaluate_tubes(outfile):
     actions = CLASSES
@@ -743,7 +746,8 @@ def getTubes(allPath,video_id,annot_map):
                 new_boxes = None
                 for i,old_box in enumerate(tube[3]):
                     key = (old_box[0],old_box[1],old_box[2],old_box[3])
-                    assert (key in annot_map[filename])
+                    if key not in annot_map[filename]:
+                        exit(0)
                     new_box = torch.Tensor(annot_map[filename][key]).unsqueeze(0)
                     if new_boxes is None:
                         new_boxes = new_box
@@ -766,7 +770,7 @@ def getTubes(allPath,video_id,annot_map):
     iouth = args.iou_thresh
     return get_PR_curve(annot, xmldata, iouth),xmldata
 
-def drawTubes(xmldata,output_dir,frames):
+def drawTubes(xmldata,output_dir,frames,gt_label):
     dt_tubes = sort_detection(xmldata)
     num_detection = len(dt_tubes['class'])
     dt_labels = dt_tubes['class']
@@ -775,6 +779,7 @@ def drawTubes(xmldata,output_dir,frames):
         for ch in range(0,3):
             frame[ch,:,:] += args.means[2-ch]
 
+    encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
     for dtind in range(num_detection):
         # frame number range
         dt_fnr = dt_tubes['framenr'][dtind]['fnr']
@@ -784,12 +789,7 @@ def drawTubes(xmldata,output_dir,frames):
         dt_label = dt_labels[dtind] - 1
         assert(dt_label>=0)
 
-        output_tube_dir = output_dir + '/tube-' + str(dtind) + '/class-' + str(dt_label)
-        if not os.path.isdir(output_tube_dir):
-            os.makedirs(output_tube_dir)
-
         for fn,bb in zip(dt_fnr,dt_bb):
-            output_frame_name = output_tube_dir + '/{:05d}.png'.format(fn)
             x = frames[fn]
 
             img = Image.fromarray(x.cpu().permute(1, 2, 0).numpy().astype(np.uint8))
@@ -797,7 +797,16 @@ def drawTubes(xmldata,output_dir,frames):
             x1,y1,x2,y2 = bb
             draw.rectangle(((x1, y1), (x2, y2)), fill=None, outline ="red")
 
-            img.save(output_frame_name)
+            npimg = np.array(img)
+
+            result, frame = cv2.imencode('.jpg', npimg, encode_param)
+            data = pickle.dumps(frame, 0)
+            size = len(data)
+
+            args.client_socket.sendall(struct.pack(">L", size) + 
+                                        struct.pack(">L", dt_label) + 
+                                        struct.pack(">L", gt_label) + data)
+            break
 
 def process_video_result(video_result,outfile,iteration,annot_map):
     frame_det_res = video_result['data']
@@ -811,21 +820,12 @@ def process_video_result(video_result,outfile,iteration,annot_map):
     t1 = time.perf_counter()
     allPath = actionPath(frame_det_res)
 
-    t2 = time.perf_counter()
-    res,xmldata = getTubes(allPath,video_id,annot_map)
-    print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res),"result:",res)
-
-    t3 = time.perf_counter()
-    # drawTubes(xmldata,output_dir,frames)
-
-    tf = time.perf_counter()
-
-    print('Gen path {:0.3f}'.format(t2 - t1),
-        ', gen tubes {:0.3f}'.format(t3 - t2),
-        ', draw tubes {:0.3f}'.format(tf - t3),
-        ', total time {:0.3f}'.format(tf - t1))
-    if video_id>0 and video_id%100 == 0:
-        mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
+    tmp,xmldata = getTubes(allPath,video_id,annot_map)
+    res,gt_label = tmp
+    print("Detecting event:",videoname,'success' if res else 'failure',
+        'total time {:0.3f}, time per frame {:0.3f}'.format(tf - t1,(tf-t1)/len(frame_det_res)))
+    # if video_id>0 and video_id%100 == 0:
+    #     mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
 def update_annot_map(annot_map,old_labels,new_labels,videoname):
     # record transform
@@ -841,7 +841,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     #                         shuffle=False, collate_fn=detection_collate, pin_memory=True)
     image_ids = dataset.ids
     save_ids = []
-    val_step = 1#250
+    val_step = 250
     num_images = len(dataset)
     video_list = dataset.video_list
     det_boxes = [[] for _ in range(len(CLASSES))]
@@ -854,11 +854,9 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     # num_batches = len(val_data_loader)
     num_batches = len(dataset)
     det_file = save_root + 'cache/' + exp_name + '/detection-'+str(iteration).zfill(6)+'.pkl'
-    print('Number of images ', len(dataset),' number of batchs', num_batches)
     frame_save_dir = save_root+'detections/CONV-'+input_type+'-'+args.listid+'-'+str(iteration).zfill(6)+'/'
-    print('\n\n\nDetections will be store in ',frame_save_dir,'\n\n')
 
-    print('Caching...')
+    print('Caching dataset...')
     cache_size = 500
     cached_data = []
     for i in range(cache_size):
@@ -874,6 +872,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     import collections
     annot_map = collections.defaultdict(dict)
     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
+    tube_t_s = time.perf_counter()
     with torch.no_grad():
         val_itr = 0
         while True:
@@ -900,9 +899,6 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
             prior_data = output[2]
             tf = time.perf_counter()
 
-            if print_time and val_itr%val_step == 0:
-                torch.cuda.synchronize()
-                print('{:d}/{:d} Forward Time {:0.3f}'.format(count, num_images,tf - t1))
             for b in range(batch_size):
                 gt = targets[b].numpy()
                 gt[:, 0] *= width
@@ -924,7 +920,11 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                     # process this video
                     video_result['videoname'] = video_list[pre_video_id]
                     video_result['video_id'] = pre_video_id
+                    tube_t_e = time.perf_counter()
+                    fps = len(video_result['frame'])/(tube_t_e - tube_t_s)
+                    print("Frame-level detection FPS:",fps)
                     process_video_result(video_result,outfile,iteration,annot_map)
+                    tube_t_s = time.perf_counter()
                     video_result['data'] = []
                     video_result['frame'] = []
                 pre_video_id = video_id
@@ -952,6 +952,13 @@ def main():
     args.data_root += args.dataset+'/'
     args.listid = '01' ## would be usefull in JHMDB-21
     print('Exp name', exp_name, args.listid)
+
+    # connect to server
+    args.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    args.client_socket.connect(('127.0.0.1', 8485))
+    connection = args.client_socket.makefile('wb')
+    print('Connected.')
+    # 
     for iteration in [int(itr) for itr in args.eval_iter.split(',') if len(itr)>0]:
         log_file = open(args.save_root + 'cache/' + exp_name + "/testing-{:d}-{:0.2f}.log".format(iteration,args.iou_thresh), "w", 1)
         log_file.write(exp_name + '\n')
