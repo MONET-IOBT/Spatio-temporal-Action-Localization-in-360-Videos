@@ -817,19 +817,27 @@ def process_video_result(video_result,outfile,iteration,annot_map):
 
     frame_save_dir = args.save_root+'detections/CONV-rgb-'+args.listid+'-'+str(iteration).zfill(6)+'/'
     output_dir = frame_save_dir+videoname
+    print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res),"result:",res)
 
     t1 = time.perf_counter()
     allPath = actionPath(frame_det_res)
 
+    t2 = time.perf_counter()
     tmp,xmldata = getTubes(allPath,video_id,annot_map)
     res,gt_label = tmp
+
+    t3 = time.perf_counter()
     drawTubes(xmldata,output_dir,frames,gt_label)
+
     tf = time.perf_counter()
-    print("Detecting event:",videoname,
-        'total time {:0.3f}, time per frame {:0.3f}'.format(tf - t1,(tf-t1)/len(frame_det_res)),
-        'Success' if res else 'Failure')
-    # if video_id>0 and video_id%100 == 0:
-    #     mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
+
+    print('Gen path {:0.3f}'.format(t2 - t1),
+        ', gen tubes {:0.3f}'.format(t3 - t2),
+        ', draw tubes {:0.3f}'.format(tf - t3),
+        ', total time {:0.3f}'.format(tf - t1))
+    # print("Detecting event:",videoname,
+    #     'total time {:0.3f}, time per frame {:0.3f}'.format(tf - t1,(tf-t1)/len(frame_det_res)),
+    #     'Success' if res else 'Failure')
 
 def update_annot_map(annot_map,old_labels,new_labels):
     # record transform
@@ -924,7 +932,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 annot_info = image_ids[index]
 
                 frame_num = annot_info[1]; video_id = annot_info[0]; videoname = video_list[video_id]
-                print(videoname,frame_num)
+                print(videoname,index)
                 # check if this id is different from the previous one
                 if (video_id != pre_video_id) and (len(video_result['data']) > 0):
                     # process this video
