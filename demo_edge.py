@@ -817,7 +817,6 @@ def process_video_result(video_result,outfile,iteration,annot_map):
 
     frame_save_dir = args.save_root+'detections/CONV-rgb-'+args.listid+'-'+str(iteration).zfill(6)+'/'
     output_dir = frame_save_dir+videoname
-    print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res))
 
     t1 = time.perf_counter()
     allPath = actionPath(frame_det_res)
@@ -831,10 +830,7 @@ def process_video_result(video_result,outfile,iteration,annot_map):
 
     tf = time.perf_counter()
 
-    print('Gen path {:0.3f}'.format(t2 - t1),
-        ', gen tubes {:0.3f}'.format(t3 - t2),
-        ', draw tubes {:0.3f}'.format(tf - t3),
-        ', total time {:0.3f}'.format(tf - t1))
+    print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res),'total time {:0.3f}'.format(tf - t1))
     # print("Detecting event:",videoname,
     #     'total time {:0.3f}, time per frame {:0.3f}'.format(tf - t1,(tf-t1)/len(frame_det_res)),
     #     'Success' if res else 'Failure')
