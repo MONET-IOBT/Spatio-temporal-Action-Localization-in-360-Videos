@@ -797,6 +797,7 @@ def drawTubes(xmldata,output_dir,frames):
             draw.rectangle(((x1, y1), (x2, y2)), fill=None, outline ="red")
 
             img.save(output_frame_name)
+            break
 
 def process_video_result(video_result,outfile,iteration,annot_map):
     frame_det_res = video_result['data']
@@ -815,7 +816,7 @@ def process_video_result(video_result,outfile,iteration,annot_map):
     print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res),"result:",res)
 
     t3 = time.perf_counter()
-    # drawTubes(xmldata,output_dir,frames)
+    drawTubes(xmldata,output_dir,frames)
 
     tf = time.perf_counter()
 
@@ -823,8 +824,8 @@ def process_video_result(video_result,outfile,iteration,annot_map):
         ', gen tubes {:0.3f}'.format(t3 - t2),
         ', draw tubes {:0.3f}'.format(tf - t3),
         ', total time {:0.3f}'.format(tf - t1))
-    if video_id>0 and video_id%100 == 0:
-        mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
+    # if video_id>0 and video_id%100 == 0:
+    #     mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
 def update_annot_map(annot_map,old_labels,new_labels):
     # record transform

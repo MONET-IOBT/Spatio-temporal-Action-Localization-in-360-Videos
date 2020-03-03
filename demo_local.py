@@ -49,8 +49,8 @@ parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to tra
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
-parser.add_argument('--data_root', default='/home/picocluster/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/picocluster/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -817,7 +817,6 @@ def process_video_result(video_result,outfile,iteration,annot_map):
 
     frame_save_dir = args.save_root+'detections/CONV-rgb-'+args.listid+'-'+str(iteration).zfill(6)+'/'
     output_dir = frame_save_dir+videoname
-    print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res))
 
     t1 = time.perf_counter()
     allPath = actionPath(frame_det_res)
@@ -830,14 +829,7 @@ def process_video_result(video_result,outfile,iteration,annot_map):
     drawTubes(xmldata,output_dir,frames,gt_label)
 
     tf = time.perf_counter()
-
-    print('Gen path {:0.3f}'.format(t2 - t1),
-        ', gen tubes {:0.3f}'.format(t3 - t2),
-        ', draw tubes {:0.3f}'.format(tf - t3),
-        ', total time {:0.3f}'.format(tf - t1))
-    # print("Detecting event:",videoname,
-    #     'total time {:0.3f}, time per frame {:0.3f}'.format(tf - t1,(tf-t1)/len(frame_det_res)),
-    #     'Success' if res else 'Failure')
+    print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res),'time={:0.3f}'.format(tf - t1))
 
 def update_annot_map(annot_map,old_labels,new_labels):
     # record transform
@@ -849,8 +841,8 @@ def update_annot_map(annot_map,old_labels,new_labels):
 def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_classes, outfile, thresh=0.5 ):
     """ Test a SSD network on an Action image database. """
 
-    # val_data_loader = data.DataLoader(dataset, args.batch_size, num_workers=args.num_workers,
-    #                         shuffle=False, collate_fn=detection_collate, pin_memory=True)
+    val_data_loader = data.DataLoader(dataset, 1, num_workers=args.num_workers,
+                            shuffle=False, collate_fn=detection_collate, pin_memory=True)
     image_ids = dataset.ids
     save_ids = []
     val_step = 250
@@ -867,15 +859,6 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     num_batches = len(dataset)
     det_file = save_root + 'cache/' + exp_name + '/detection-'+str(iteration).zfill(6)+'.pkl'
     frame_save_dir = save_root+'detections/CONV-'+input_type+'-'+args.listid+'-'+str(iteration).zfill(6)+'/'
-
-    print('Caching dataset...')
-    cache_size = args.cache_size
-    cached_data = []
-    for i in range(cache_size):
-        cached_data.append(dataset[i])
-        if i>0 and i%(cache_size/10)==0:
-            print(i/cache_size*100,'%')
-    print('Data cached')
 
     # connect to server
     args.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -894,16 +877,13 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     frame_level_time = 0
     frame_level_cnt = 0
     with torch.no_grad():
-        val_itr = 0
-        while True:
+        for val_itr in range(len(val_data_loader)):
+            if not batch_iterator:
+                batch_iterator = iter(val_data_loader)
 
             torch.cuda.synchronize()
 
-            image, target, img_index = cached_data[val_itr]
-
-            images = torch.stack([image], 0)
-            targets = [torch.FloatTensor(target)]
-            img_indexs = [img_index]
+            images, targets, img_indexs = next(batch_iterator)
 
             batch_size = images.size(0)
             height, width = images.size(2), images.size(3)
@@ -958,16 +938,6 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 video_result['frame'].append(images[b])
 
                 count += 1
-
-            val_itr = (val_itr+1)%len(cached_data)
-            if val_itr == 0:
-                pre_video_id = -1
-                video_result = {}
-                video_result['data'] = []
-                video_result['frame'] = []
-                annot_map = {}
-                frame_level_time = 0
-                frame_level_cnt = 0
 
     return
 
