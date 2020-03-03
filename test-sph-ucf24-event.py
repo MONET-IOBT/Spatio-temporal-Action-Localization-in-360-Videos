@@ -26,6 +26,9 @@ import pickle
 import scipy.io as sio # to save detection as mat files
 from PIL import ImageDraw,Image
 import cv2
+from collections import Counter
+import linecache
+import os
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -824,8 +827,8 @@ def process_video_result(video_result,outfile,iteration,annot_map):
         ', gen tubes {:0.3f}'.format(t3 - t2),
         ', draw tubes {:0.3f}'.format(tf - t3),
         ', total time {:0.3f}'.format(tf - t1))
-    # if video_id>0 and video_id%100 == 0:
-    #     mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
+    if video_id>0 and video_id%100 == 0:
+        mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
 def update_annot_map(annot_map,old_labels,new_labels):
     # record transform
@@ -837,8 +840,8 @@ def update_annot_map(annot_map,old_labels,new_labels):
 def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_classes, outfile, thresh=0.5 ):
     """ Test a SSD network on an Action image database. """
 
-    # val_data_loader = data.DataLoader(dataset, args.batch_size, num_workers=args.num_workers,
-    #                         shuffle=False, collate_fn=detection_collate, pin_memory=True)
+    val_data_loader = data.DataLoader(dataset, args.batch_size, num_workers=args.num_workers,
+                            shuffle=False, collate_fn=detection_collate, pin_memory=True)
     image_ids = dataset.ids
     save_ids = []
     val_step = 250
@@ -851,8 +854,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     count = 0
     torch.cuda.synchronize()
     ts = time.perf_counter()
-    # num_batches = len(val_data_loader)
-    num_batches = len(dataset)
+    num_batches = len(val_data_loader)
     det_file = save_root + 'cache/' + exp_name + '/detection-'+str(iteration).zfill(6)+'.pkl'
     print('Number of images ', len(dataset),' number of batchs', num_batches)
     frame_save_dir = save_root+'detections/CONV-'+input_type+'-'+args.listid+'-'+str(iteration).zfill(6)+'/'
@@ -868,22 +870,13 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     annot_map = collections.defaultdict(dict)
     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
     with torch.no_grad():
-        # for val_itr in range(len(val_data_loader)):
-        #     if not batch_iterator:
-        #         batch_iterator = iter(val_data_loader)
-
-        #     torch.cuda.synchronize()
-
-        #     images, targets, img_indexs = next(batch_iterator)
-        for val_itr in range(num_images):
+        for val_itr in range(len(val_data_loader)):
+            if not batch_iterator:
+                batch_iterator = iter(val_data_loader)
 
             torch.cuda.synchronize()
 
-            image, target, img_index = dataset[val_itr]
-
-            images = torch.stack([image], 0)
-            targets = [torch.FloatTensor(target)]
-            img_indexs = [img_index]
+            images, targets, img_indexs = next(batch_iterator)
 
             batch_size = images.size(0)
             height, width = images.size(2), images.size(3)
@@ -948,30 +941,30 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 video_result['data'].append(res)
                 video_result['frame'].append(images[b])
 
-                for cl_ind in range(1, num_classes):
-                    scores = conf_scores[:, cl_ind].squeeze()
-                    c_mask = scores.gt(args.conf_thresh)  # greater than minmum threshold
-                    scores = scores[c_mask].squeeze()
-                    # print('scores size',scores.size())
-                    if scores.dim() == 0 or scores.shape[0] == 0:
-                        # print(len(''), ' dim ==0 ')
-                        det_boxes[cl_ind - 1].append(np.asarray([]))
-                        continue
-                    boxes = decoded_boxes.clone()
-                    l_mask = c_mask.unsqueeze(1).expand_as(boxes)
-                    boxes = boxes[l_mask].view(-1, 4)
-                    # idx of highest scoring and non-overlapping boxes per class
-                    ids, counts = nms(boxes, scores, args.nms_thresh, args.topk)  # idsn - ids after nms
-                    scores = scores[ids[:counts]].cpu().numpy()
-                    boxes = boxes[ids[:counts]].cpu().numpy()
-                    # print('boxes sahpe',boxes.shape)
-                    boxes[:, 0] *= width
-                    boxes[:, 2] *= width
-                    boxes[:, 1] *= height
-                    boxes[:, 3] *= height
+                # for cl_ind in range(1, num_classes):
+                #     scores = conf_scores[:, cl_ind].squeeze()
+                #     c_mask = scores.gt(args.conf_thresh)  # greater than minmum threshold
+                #     scores = scores[c_mask].squeeze()
+                #     # print('scores size',scores.size())
+                #     if scores.dim() == 0 or scores.shape[0] == 0:
+                #         # print(len(''), ' dim ==0 ')
+                #         det_boxes[cl_ind - 1].append(np.asarray([]))
+                #         continue
+                #     boxes = decoded_boxes.clone()
+                #     l_mask = c_mask.unsqueeze(1).expand_as(boxes)
+                #     boxes = boxes[l_mask].view(-1, 4)
+                #     # idx of highest scoring and non-overlapping boxes per class
+                #     ids, counts = nms(boxes, scores, args.nms_thresh, args.topk)  # idsn - ids after nms
+                #     scores = scores[ids[:counts]].cpu().numpy()
+                #     boxes = boxes[ids[:counts]].cpu().numpy()
+                #     # print('boxes sahpe',boxes.shape)
+                #     boxes[:, 0] *= width
+                #     boxes[:, 2] *= width
+                #     boxes[:, 1] *= height
+                #     boxes[:, 3] *= height
 
-                    cls_dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=True)
-                    det_boxes[cl_ind - 1].append(cls_dets)
+                #     cls_dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=True)
+                #     det_boxes[cl_ind - 1].append(cls_dets)
 
                 count += 1
             if val_itr%val_step == 0:
@@ -992,7 +985,8 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
 
     print('Evaluating detections for itration number ', iteration)
 
-    return evaluate_detections(gt_boxes, det_boxes, CLASSES, iou_thresh=thresh)
+    # return evaluate_detections(gt_boxes, det_boxes, CLASSES, iou_thresh=thresh)
+    return
 
 
 def main():
@@ -1037,13 +1031,14 @@ def main():
         torch.cuda.synchronize()
         tt0 = time.perf_counter()
         log_file.write('Testing net \n')
-        mAP, ap_all, ap_strs = test_net(net, args.save_root, exp_name, args.input_type, dataset, iteration, num_classes, log_file)
-        for ap_str in ap_strs:
-            print(ap_str)
-            log_file.write(ap_str + '\n')
-        ptr_str = '\nMEANAP:::=>' + str(mAP) + '\n'
-        print(ptr_str)
-        log_file.write(ptr_str)
+        test_net(net, args.save_root, exp_name, args.input_type, dataset, iteration, num_classes, log_file)
+        # mAP, ap_all, ap_strs = test_net(net, args.save_root, exp_name, args.input_type, dataset, iteration, num_classes, log_file)
+        # for ap_str in ap_strs:
+        #     print(ap_str)
+        #     log_file.write(ap_str + '\n')
+        # ptr_str = '\nMEANAP:::=>' + str(mAP) + '\n'
+        # print(ptr_str)
+        # log_file.write(ptr_str)
 
         torch.cuda.synchronize()
         print('Complete set time {:0.2f}'.format(time.perf_counter() - tt0))
