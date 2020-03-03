@@ -49,8 +49,8 @@ parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to tra
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
-parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -134,6 +134,7 @@ def sort_live_paths(live_paths,path_order_score,dead_paths,dp_count,gap):
             dead_paths[dp_count]['count'] = live_paths[olp]['count']
             dead_paths[dp_count]['lastfound'] = live_paths[olp]['lastfound']
             dp_count += 1
+        del live_paths[olp]
     return sorted_live_paths,dead_paths,dp_count
 
 def fill_gaps(path,gap):
@@ -172,6 +173,7 @@ def fill_gaps(path,gap):
                             count += 1
                         i += 1
                 g_count += 1
+            del path[lp]
     return gap_filled_paths
 
 def sort_paths(live_paths):
@@ -200,6 +202,7 @@ def sort_paths(live_paths):
             sorted_live_paths[lpc]['foundat'] = live_paths[olp]['foundat']
             sorted_live_paths[lpc]['count'] = live_paths[olp]['count']
             sorted_live_paths[lpc]['lastfound'] = live_paths[olp]['lastfound']
+            del live_paths[olp]
     return sorted_live_paths
 
 
@@ -345,8 +348,6 @@ def genActionPaths(video_result, a, nms_thresh, iouth,gap):
 
     paths = incremental_linking(action_frames,iouth, gap)
     t3 = time.perf_counter()
-    # print('Filter:{:0.3f},'.format(t2 - t1),
-    #     'linking:{:0.3f}'.format(t3 - t2))
     return paths
 
 
@@ -463,6 +464,7 @@ def actionPathSmoother4oneVideo(video_paths,alpha,num_action):
                     final_tubes['path_boxes'][action_count] = action_paths[p]['boxes']
                     final_tubes['path_scores'][action_count] = action_paths[p]['scores']
                     action_count += 1
+            del video_paths[a]
     return final_tubes
 
 
@@ -735,9 +737,7 @@ def evaluate_tubes(outfile):
 # smooth tubes and evaluate them
 def getTubes(allPath,video_id,annot_map):
     # read all groundtruth actions
-    final_annot_location = args.data_root + 'splitfiles/finalAnnots.mat'
-    annot = sio.loadmat(final_annot_location)
-    annot = annot['annot'][0][video_id]
+    annot = args.final_annot['annot'][0][video_id]
 
     if args.dataset == 'ucf24':
         # transform the annotation
@@ -807,6 +807,7 @@ def process_video_result(video_result,outfile,iteration,annot_map):
     videoname = video_result['videoname']
     video_id = video_result['video_id']
     frames = video_result['frame']
+    print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res))
 
     frame_save_dir = args.save_root+'detections/CONV-rgb-'+args.listid+'-'+str(iteration).zfill(6)+'/'
     output_dir = frame_save_dir+videoname
@@ -816,19 +817,20 @@ def process_video_result(video_result,outfile,iteration,annot_map):
 
     t2 = time.perf_counter()
     res,xmldata = getTubes(allPath,video_id,annot_map)
-    print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res),"result:",res)
 
     t3 = time.perf_counter()
-    drawTubes(xmldata,output_dir,frames)
+    # drawTubes(xmldata,output_dir,frames)
+    xmldata = None
 
     tf = time.perf_counter()
 
     print('Gen path {:0.3f}'.format(t2 - t1),
         ', gen tubes {:0.3f}'.format(t3 - t2),
         ', draw tubes {:0.3f}'.format(tf - t3),
-        ', total time {:0.3f}'.format(tf - t1))
-    if video_id>0 and video_id%100 == 0:
-        mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
+        ', total time {:0.3f}'.format(tf - t1),
+        ', result',res)
+    # if video_id>0 and video_id%100 == 0:
+    #     mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
 def update_annot_map(annot_map,old_labels,new_labels):
     # record transform
@@ -941,30 +943,30 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 video_result['data'].append(res)
                 video_result['frame'].append(images[b])
 
-                # for cl_ind in range(1, num_classes):
-                #     scores = conf_scores[:, cl_ind].squeeze()
-                #     c_mask = scores.gt(args.conf_thresh)  # greater than minmum threshold
-                #     scores = scores[c_mask].squeeze()
-                #     # print('scores size',scores.size())
-                #     if scores.dim() == 0 or scores.shape[0] == 0:
-                #         # print(len(''), ' dim ==0 ')
-                #         det_boxes[cl_ind - 1].append(np.asarray([]))
-                #         continue
-                #     boxes = decoded_boxes.clone()
-                #     l_mask = c_mask.unsqueeze(1).expand_as(boxes)
-                #     boxes = boxes[l_mask].view(-1, 4)
-                #     # idx of highest scoring and non-overlapping boxes per class
-                #     ids, counts = nms(boxes, scores, args.nms_thresh, args.topk)  # idsn - ids after nms
-                #     scores = scores[ids[:counts]].cpu().numpy()
-                #     boxes = boxes[ids[:counts]].cpu().numpy()
-                #     # print('boxes sahpe',boxes.shape)
-                #     boxes[:, 0] *= width
-                #     boxes[:, 2] *= width
-                #     boxes[:, 1] *= height
-                #     boxes[:, 3] *= height
+                for cl_ind in range(1, num_classes):
+                    scores = conf_scores[:, cl_ind].squeeze()
+                    c_mask = scores.gt(args.conf_thresh)  # greater than minmum threshold
+                    scores = scores[c_mask].squeeze()
+                    # print('scores size',scores.size())
+                    if scores.dim() == 0 or scores.shape[0] == 0:
+                        # print(len(''), ' dim ==0 ')
+                        det_boxes[cl_ind - 1].append(np.asarray([]))
+                        continue
+                    boxes = decoded_boxes.clone()
+                    l_mask = c_mask.unsqueeze(1).expand_as(boxes)
+                    boxes = boxes[l_mask].view(-1, 4)
+                    # idx of highest scoring and non-overlapping boxes per class
+                    ids, counts = nms(boxes, scores, args.nms_thresh, args.topk)  # idsn - ids after nms
+                    scores = scores[ids[:counts]].cpu().numpy()
+                    boxes = boxes[ids[:counts]].cpu().numpy()
+                    # print('boxes sahpe',boxes.shape)
+                    boxes[:, 0] *= width
+                    boxes[:, 2] *= width
+                    boxes[:, 1] *= height
+                    boxes[:, 3] *= height
 
-                #     cls_dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=True)
-                #     det_boxes[cl_ind - 1].append(cls_dets)
+                    cls_dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=True)
+                    det_boxes[cl_ind - 1].append(cls_dets)
 
                 count += 1
             if val_itr%val_step == 0:
@@ -985,8 +987,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
 
     print('Evaluating detections for itration number ', iteration)
 
-    # return evaluate_detections(gt_boxes, det_boxes, CLASSES, iou_thresh=thresh)
-    return
+    return evaluate_detections(gt_boxes, det_boxes, CLASSES, iou_thresh=thresh)
 
 
 def main():
@@ -1031,14 +1032,15 @@ def main():
         torch.cuda.synchronize()
         tt0 = time.perf_counter()
         log_file.write('Testing net \n')
-        test_net(net, args.save_root, exp_name, args.input_type, dataset, iteration, num_classes, log_file)
-        # mAP, ap_all, ap_strs = test_net(net, args.save_root, exp_name, args.input_type, dataset, iteration, num_classes, log_file)
-        # for ap_str in ap_strs:
-        #     print(ap_str)
-        #     log_file.write(ap_str + '\n')
-        # ptr_str = '\nMEANAP:::=>' + str(mAP) + '\n'
-        # print(ptr_str)
-        # log_file.write(ptr_str)
+        final_annot_location = args.data_root + 'splitfiles/finalAnnots.mat'
+        args.final_annot = sio.loadmat(final_annot_location)
+        mAP, ap_all, ap_strs = test_net(net, args.save_root, exp_name, args.input_type, dataset, iteration, num_classes, log_file)
+        for ap_str in ap_strs:
+            print(ap_str)
+            log_file.write(ap_str + '\n')
+        ptr_str = '\nMEANAP:::=>' + str(mAP) + '\n'
+        print(ptr_str)
+        log_file.write(ptr_str)
 
         torch.cuda.synchronize()
         print('Complete set time {:0.2f}'.format(time.perf_counter() - tt0))
