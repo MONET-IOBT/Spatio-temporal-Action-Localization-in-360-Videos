@@ -851,7 +851,8 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     count = 0
     torch.cuda.synchronize()
     ts = time.perf_counter()
-    num_batches = len(val_data_loader)
+    # num_batches = len(val_data_loader)
+    num_batches = len(dataset)
     det_file = save_root + 'cache/' + exp_name + '/detection-'+str(iteration).zfill(6)+'.pkl'
     print('Number of images ', len(dataset),' number of batchs', num_batches)
     frame_save_dir = save_root+'detections/CONV-'+input_type+'-'+args.listid+'-'+str(iteration).zfill(6)+'/'
