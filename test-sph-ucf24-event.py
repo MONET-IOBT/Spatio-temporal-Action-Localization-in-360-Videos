@@ -837,8 +837,8 @@ def update_annot_map(annot_map,old_labels,new_labels):
 def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_classes, outfile, thresh=0.5 ):
     """ Test a SSD network on an Action image database. """
 
-    val_data_loader = data.DataLoader(dataset, args.batch_size, num_workers=args.num_workers,
-                            shuffle=False, collate_fn=detection_collate, pin_memory=True)
+    # val_data_loader = data.DataLoader(dataset, args.batch_size, num_workers=args.num_workers,
+    #                         shuffle=False, collate_fn=detection_collate, pin_memory=True)
     image_ids = dataset.ids
     save_ids = []
     val_step = 250
@@ -867,13 +867,22 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     annot_map = collections.defaultdict(dict)
     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
     with torch.no_grad():
-        for val_itr in range(len(val_data_loader)):
-            if not batch_iterator:
-                batch_iterator = iter(val_data_loader)
+        # for val_itr in range(len(val_data_loader)):
+        #     if not batch_iterator:
+        #         batch_iterator = iter(val_data_loader)
+
+        #     torch.cuda.synchronize()
+
+        #     images, targets, img_indexs = next(batch_iterator)
+        for val_itr in range(num_images):
 
             torch.cuda.synchronize()
 
-            images, targets, img_indexs = next(batch_iterator)
+            image, target, img_index = dataset[val_itr]
+
+            images = torch.stack([image], 0)
+            targets = [torch.FloatTensor(target)]
+            img_indexs = [img_index]
 
             batch_size = images.size(0)
             height, width = images.size(2), images.size(3)
