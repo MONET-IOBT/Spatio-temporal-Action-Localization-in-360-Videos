@@ -815,20 +815,20 @@ def process_video_result(video_result,outfile,iteration,annot_map):
     t1 = time.perf_counter()
     allPath = actionPath(frame_det_res)
 
-    t2 = time.perf_counter()
-    res,xmldata = getTubes(allPath,video_id,annot_map)
+    # t2 = time.perf_counter()
+    # res,xmldata = getTubes(allPath,video_id,annot_map)
 
-    t3 = time.perf_counter()
-    # drawTubes(xmldata,output_dir,frames)
-    xmldata = None
+    # t3 = time.perf_counter()
+    # # drawTubes(xmldata,output_dir,frames)
+    # xmldata = None
 
-    tf = time.perf_counter()
+    # tf = time.perf_counter()
 
-    print('Gen path {:0.3f}'.format(t2 - t1),
-        ', gen tubes {:0.3f}'.format(t3 - t2),
-        ', draw tubes {:0.3f}'.format(tf - t3),
-        ', total time {:0.3f}'.format(tf - t1),
-        ', result',res)
+    # print('Gen path {:0.3f}'.format(t2 - t1),
+    #     ', gen tubes {:0.3f}'.format(t3 - t2),
+    #     ', draw tubes {:0.3f}'.format(tf - t3),
+    #     ', total time {:0.3f}'.format(tf - t1),
+    #     ', result',res)
     # if video_id>0 and video_id%100 == 0:
     #     mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
