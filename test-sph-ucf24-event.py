@@ -902,7 +902,6 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
 
             t1 = time.perf_counter()
             GPUtil.showUtilization()
-            print(images.shape)
             output = net(images)
 
             loc_data = output[0]
