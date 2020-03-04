@@ -29,6 +29,7 @@ import cv2
 from collections import Counter
 import linecache
 import os
+import GPUtil
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -900,6 +901,8 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 images = images.cuda()
 
             t1 = time.perf_counter()
+            GPUtil.showUtilization()
+            print(images.shape)
             output = net(images)
 
             loc_data = output[0]
