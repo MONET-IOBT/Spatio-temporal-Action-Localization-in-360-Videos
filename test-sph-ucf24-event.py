@@ -802,35 +802,34 @@ def drawTubes(xmldata,output_dir,frames):
             break
 
 def process_video_result(video_result,outfile,iteration,annot_map):
-    GPUtil.showUtilization()
     frame_det_res = video_result['data']
     videoname = video_result['videoname']
     video_id = video_result['video_id']
-    frames = video_result['frame']
+    # frames = video_result['frame']
     print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res))
 
-    # frame_save_dir = args.save_root+'detections/CONV-rgb-'+args.listid+'-'+str(iteration).zfill(6)+'/'
-    # output_dir = frame_save_dir+videoname
+    frame_save_dir = args.save_root+'detections/CONV-rgb-'+args.listid+'-'+str(iteration).zfill(6)+'/'
+    output_dir = frame_save_dir+videoname
 
-    # t1 = time.perf_counter()
-    # allPath = actionPath(frame_det_res)
+    t1 = time.perf_counter()
+    allPath = actionPath(frame_det_res)
 
-    # t2 = time.perf_counter()
-    # res,xmldata = getTubes(allPath,video_id,annot_map)
+    t2 = time.perf_counter()
+    res,xmldata = getTubes(allPath,video_id,annot_map)
 
-    # t3 = time.perf_counter()
-    # # drawTubes(xmldata,output_dir,frames)
-    # xmldata = None
+    t3 = time.perf_counter()
+    # drawTubes(xmldata,output_dir,frames)
+    xmldata = None
 
-    # tf = time.perf_counter()
+    tf = time.perf_counter()
 
-    # print('Gen path {:0.3f}'.format(t2 - t1),
-    #     ', gen tubes {:0.3f}'.format(t3 - t2),
-    #     ', draw tubes {:0.3f}'.format(tf - t3),
-    #     ', total time {:0.3f}'.format(tf - t1),
-    #     ', result',res)
-    # if video_id>0 and video_id%100 == 0:
-    #     mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
+    print('Gen path {:0.3f}'.format(t2 - t1),
+        ', gen tubes {:0.3f}'.format(t3 - t2),
+        ', draw tubes {:0.3f}'.format(tf - t3),
+        ', total time {:0.3f}'.format(tf - t1),
+        ', result',res)
+    if video_id>0 and video_id%100 == 0:
+        mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
 def update_annot_map(annot_map,old_labels,new_labels):
     # record transform
@@ -930,9 +929,12 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                     video_result['videoname'] = video_list[pre_video_id]
                     video_result['video_id'] = pre_video_id
                     process_video_result(video_result,outfile,iteration,annot_map)
+                    GPUtil.showUtilization()
                     annot_map = {}
+                    del video_result['data']
+                    # del video_result['frame']
                     video_result['data'] = []
-                    video_result['frame'] = []
+                    # video_result['frame'] = []
                 if args.dataset == 'ucf24':
                     update_annot_map(annot_map,image_ids[index][3],gt)
                 pre_video_id = video_id
@@ -941,7 +943,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 res['scores'] = conf_scores
                 res['boxes'] = decoded_boxes
                 video_result['data'].append(res)
-                video_result['frame'].append(images[b])
+                # video_result['frame'].append(images[b])
 
                 for cl_ind in range(1, num_classes):
                     scores = conf_scores[:, cl_ind].squeeze()
