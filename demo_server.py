@@ -8,7 +8,7 @@ import zlib
 import pickle,os
 import numpy as np
 import argparse
-from data import UCF24_CLASSES
+from data.ucf24 import UCF24_CLASSES
 import matplotlib.pyplot as plt
 CLASSES = UCF24_CLASSES 
 
