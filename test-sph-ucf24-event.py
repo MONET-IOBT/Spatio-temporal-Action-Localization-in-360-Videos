@@ -929,7 +929,6 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                     video_result['videoname'] = video_list[pre_video_id]
                     video_result['video_id'] = pre_video_id
                     process_video_result(video_result,outfile,iteration,annot_map)
-                    GPUtil.showUtilization()
                     annot_map = {}
                     del video_result['data']
                     # del video_result['frame']
@@ -981,9 +980,6 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 torch.cuda.synchronize()
                 te = time.perf_counter()
                 print('NMS stuff Time {:0.3f}'.format(te - tf))
-        if (len(video_result['data']) > 0):
-            # process this video
-            process_video_result(video_result,outfile,iteration,annot_map)
     print('Evaluate tubes:')
     mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
 
