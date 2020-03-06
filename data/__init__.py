@@ -1,7 +1,7 @@
 #from .voc0712 import VOCDetection, AnnotationTransform, detection_collate, VOC_CLASSES
-from .ucf24 import UCF24Detection, AnnotationTransform, detection_collate, UCF24_CLASSES
+# from .ucf24 import UCF24Detection, AnnotationTransform, detection_collate, UCF24_CLASSES
 from .config import *
-from .jhmdb import JHMDB, JHMDB_CLASSES
+# from .jhmdb import JHMDB, JHMDB_CLASSES
 import cv2
 import numpy as np
 
