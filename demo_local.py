@@ -809,6 +809,7 @@ def drawTubes(xmldata,output_dir,frames,gt_label):
                                         struct.pack(">L", gt_label) + data)
             break
 
+
 def process_video_result(video_result,outfile,iteration,annot_map):
     frame_det_res = video_result['data']
     videoname = video_result['videoname']
@@ -862,7 +863,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
 
     # connect to server
     args.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    args.client_socket.connect(('127.0.0.1', 8485))
+    args.client_socket.connect(('127.0.0.1', 8487))
     connection = args.client_socket.makefile('wb')
     print('Connected.')
 
@@ -924,6 +925,8 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                     fps = frame_level_cnt/frame_level_time
                     print("Frame-level detection FPS:",fps)
                     process_video_result(video_result,outfile,iteration,annot_map)
+                    frame_level_time = 0
+                    frame_level_cnt = 0
                     annot_map = {}
                     video_result['data'] = []
                     video_result['frame'] = []

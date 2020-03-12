@@ -22,8 +22,7 @@ args = parser.parse_args()
 
 if __name__ == '__main__':
 	HOST=''
-	PORT=8485
-
+	PORT=8487
 	s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 	# print('Socket created')
 
@@ -37,7 +36,7 @@ if __name__ == '__main__':
 	data = b""
 	payload_size = struct.calcsize(">L")
 
-	output_dir = '/home/picocluster/research/dataset/ucf24/detections'
+	output_dir = '/home/bo/research/dataset/ucf24/detections'
 	if not os.path.isdir(output_dir):
 		os.makedirs(output_dir)
 	dtind = 0

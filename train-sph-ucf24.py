@@ -49,7 +49,7 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--version', default='2', help='The version of config')
+parser.add_argument('--version', default='1', help='The version of config')
 # parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--dataset', default='ucf24', help='pretrained base model')
 parser.add_argument('--ssd_dim', default=512, type=int, help='Input Size for SSD') # only support 300 now
@@ -69,14 +69,13 @@ parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight dec
 parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
 parser.add_argument('--vis_port', default=8097, type=int, help='Port for Visdom Server')
-parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
 parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or ktn')
-parser.add_argument('--data_type', default='3d', help='2d or 3d')
 parser.add_argument('--lossy', default=True, type=str2bool, help='Lossy image transmission')
 
 ## Parse arguments
@@ -107,8 +106,8 @@ def main():
     args.print_step = 10
 
     ## Define the experiment Name will used to same directory and ENV for visdom
-    args.exp_name = '{}-SSD-{}-{}-{}-bs-{}-{}-lr-{:05d}'.format(args.net_type, args.data_type, args.dataset,
-                args.input_type, args.batch_size, args.cfg['base'], int(args.lr*100000))
+    args.exp_name = '{}-SSD-{}-{}-bs-{}-{}-lr-{:05d}'.format(args.net_type, args.dataset, args.input_type,
+                args.batch_size, args.cfg['base'], int(args.lr*100000))
 
     args.save_root += args.dataset+'/'
     args.save_root = args.save_root+'cache/'+args.exp_name+'/'
@@ -138,8 +137,6 @@ def main():
             net = build_vgg_ssd(args.num_classes, args.cfg)
             net.loc.apply(weights_init)
             net.conf.apply(weights_init)
-    elif args.cfg['base'] == 'mobile_vgg':
-        net = MobileSSD512(args.num_classes, args.cfg)
     elif args.cfg['base'] == 'fpn_mobile':
         net = MobileFPNSSD512(args.num_classes, args.cfg)
     elif args.cfg['base'] == 'yolov3':
@@ -199,31 +196,16 @@ def train(args, net, optimizer, criterion, scheduler):
     cls_losses = AverageMeter()
 
     print('Loading Dataset...')
-    if args.data_type == '2d':
-        if args.dataset == 'ucf24':
-            train_dataset = UCF24Detection(args.data_root, args.train_sets, SSDAugmentation(300, args.means),
-                                       AnnotationTransform(), input_type=args.input_type)
-            val_dataset = UCF24Detection(args.data_root, 'test', BaseTransform(300, args.means),
-                                         AnnotationTransform(), input_type=args.input_type,
-                                         full_test=False)
-        else:
-            train_dataset = JHMDB(args.data_root, args.train_sets, SSDAugmentation(300, None), 
-                                    AnnotationTransform(), split=1)
-            val_dataset = JHMDB(args.data_root, 'test', BaseTransform(300, None), 
-                                    AnnotationTransform(), split=1)
-    elif args.data_type == '3d':
-        if args.dataset == 'ucf24':
-            train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means), AnnotationTransform(), 
-                                    input_type=args.input_type, outshape=args.outshape)
-            val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
-                                    input_type=args.input_type, outshape=args.outshape)
-        else:
-            train_dataset = OmniJHMDB(args.data_root, args.train_sets, SSDAugmentation(300, None), AnnotationTransform(), 
-                                    outshape=args.outshape)
-            val_dataset = OmniJHMDB(args.data_root, 'test', BaseTransform(300, None), AnnotationTransform(), 
-                                    outshape=args.outshape)
+    if args.dataset == 'ucf24':
+        train_dataset = OmniUCF24(args.data_root, args.train_sets, SSDAugmentation(300, args.means), AnnotationTransform(), 
+                                input_type=args.input_type, outshape=args.outshape)
+        val_dataset = OmniUCF24(args.data_root, 'test', BaseTransform(300, args.means), AnnotationTransform(), 
+                                input_type=args.input_type, outshape=args.outshape)
     else:
-        exit(0)
+        train_dataset = OmniJHMDB(args.data_root, args.train_sets, SSDAugmentation(300, None), AnnotationTransform(), 
+                                outshape=args.outshape)
+        val_dataset = OmniJHMDB(args.data_root, 'test', BaseTransform(300, None), AnnotationTransform(), 
+                                    outshape=args.outshape)
     
     print('Training SSD on', train_dataset.name)
 
