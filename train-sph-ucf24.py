@@ -76,7 +76,6 @@ parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence 
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
 parser.add_argument('--topk', default=50, type=int, help='topk for evaluation')
 parser.add_argument('--net_type', default='conv2d', help='conv2d or sphnet or ktn')
-parser.add_argument('--lossy', default=True, type=str2bool, help='Lossy image transmission')
 
 ## Parse arguments
 args = parser.parse_args()
@@ -227,20 +226,6 @@ def train(args, net, optimizer, criterion, scheduler):
             if iteration > args.max_iter:
                 break
             iteration += 1
-
-            if args.lossy:
-                lossy_images = None
-                for image in images:
-                    lossy_image = image.permute(1,2,0).numpy()
-                    result, lossy_image = cv2.imencode('.jpg', lossy_image, encode_param)
-                    lossy_image = cv2.imdecode(lossy_image, cv2.IMREAD_COLOR)
-                    lossy_image = torch.from_numpy(lossy_image).float().permute(2,0,1).unsqueeze(0)
-                    if lossy_images is None:
-                        lossy_images = lossy_image
-                    else:
-                        lossy_images = torch.cat((lossy_images,lossy_image),0)
-                
-                images = lossy_images.contiguous()
 
             if args.cuda:
                 images = images.cuda(0, non_blocking=True)

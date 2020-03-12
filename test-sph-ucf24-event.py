@@ -50,8 +50,8 @@ parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to tra
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
-parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -578,6 +578,18 @@ def compute_spatial_temporal_iou(gt_fnr,gt_bb,dt_fnr,dt_bb):
         st_iou = 0
     return st_iou
 
+def auc(fp,tp):
+    mfp = np.concatenate(([0.], fp, [1.]))
+    mtp = np.concatenate(([0.], tp, [0.]))
+
+    for i in range(mtp.size - 1, 0, -1):
+        mtp[i - 1] = np.maximum(mtp[i - 1], mtp[i])
+
+    i = np.where(mfp[1:] != mfp[:-1])[0]
+
+    res = np.sum((mfp[i + 1] - mfp[i]) * mtp[i + 1])
+    return res
+
 def voc_ap(rec, prec, use_07_metric=False):
     """ ap = voc_ap(rec, prec, [use_07_metric])
     Compute VOC AP given precision and recall.
@@ -614,14 +626,18 @@ def voc_ap(rec, prec, use_07_metric=False):
 
 # count of detected tubes per class
 cc = [0 for _ in range(len(CLASSES))]
-# result for each detected tube per class
-allscore = {}
-for a in range(len(CLASSES)):
-    allscore[a] = np.zeros((10000,2))
-# num of gt tubes per class
+
 total_num_gt_tubes = [0 for _ in range(len(CLASSES))]
-# avg iou per class
-averageIoU = np.zeros(len(CLASSES))
+
+IoUTHs = [0.2] + [0.5 + 0.05*i for i in range(10)]
+
+allscore = {}
+averageIoU = {}
+for iouth in IoUTHs:
+    allscore[iouth] = {}
+    for a in range(len(CLASSES)):
+        allscore[iouth][a] = np.zeros((10000,2))
+    averageIoU[iouth] = np.zeros(len(CLASSES))
 preds = []
 gts = []
 
@@ -681,11 +697,11 @@ def get_PR_curve(annot, xmldata, iouth):
         if ioumax > iouth:
             covered_gt_tubes[gtind] = 1
             # records the score,T/F of each dt tube at every step for every class
-            allscore[dt_label][cc[dt_label],:] = [dt_tubes['score'][dtind],1]
+            allscore[iouth][dt_label][cc[dt_label],:] = [dt_tubes['score'][dtind],1]
             # max iou with rest gt tubes
-            averageIoU[dt_label] += ioumax
+            averageIoU[iouth][dt_label] += ioumax
         else:
-            allscore[dt_label][cc[dt_label],:] = [dt_tubes['score'][dtind],0]
+            allscore[iouth][dt_label][cc[dt_label],:] = [dt_tubes['score'][dtind],0]
     preds.append(pred)
     gts.append(gt)
     return pred == gt
@@ -695,43 +711,45 @@ def evaluate_tubes(outfile):
     numActions = len(CLASSES)
     AP = np.zeros(numActions)
     AIoU = np.zeros(numActions)
-    # todo: need to store all detection info of all videos into allscore
-    tmpscore = {}
-    for a in range(numActions):
-        tmpscore[a] = allscore[a][:cc[a],:].copy()
-        scores = tmpscore[a][:,0]
-        result = tmpscore[a][:,1]
-        si = np.argsort(-scores)
-        result = result[si]
-        fp = np.cumsum(result == 0)
-        tp = np.cumsum(result == 1)
-        fp = fp.astype(np.float64)
-        tp = tp.astype(np.float64)
-        # need to calculate AUC
-        cdet = 0
-        if len(tp) > 0:
-            cdet = int(tp[-1])
-            AIoU[a] = (averageIoU[a]+0.000001)/(cdet+0.000001) if cdet > 1 else averageIoU[a]
+    AUC = np.zeros(numActions)
+    
+    for iouth in IoUTHs:
+        for a in range(numActions):
+            tmpscore = allscore[iouth][a][:cc[a],:].copy()
+            scores = tmpscore[:,0]
+            result = tmpscore[:,1]
+            si = np.argsort(-scores)
+            result = result[si]
+            fp = np.cumsum(result == 0)
+            tp = np.cumsum(result == 1)
+            fp = fp.astype(np.float64)
+            tp = tp.astype(np.float64)
+            # need to calculate AUC
+            cdet = 0
+            if len(tp) > 0:
+                cdet = int(tp[-1])
+                AIoU[a] = (averageIoU[iouth][a]+0.000001)/(cdet+0.000001) if cdet > 1 else averageIoU[iouth][a]
 
-        recall = tp/float(total_num_gt_tubes[a]+1)
-        precision = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
-        AP[a] = voc_ap(recall,precision)
-        ptr_str = 'Action {:02d} AP = {:0.5f} and AIOU {:0.5f}\
-             GT {:03d} total det {:02d} correct det {:02d} {:s}\n'\
-             .format(a, AP[a],AIoU[a],total_num_gt_tubes[a],cc[a],cdet,actions[a])
+            recall = tp/float(total_num_gt_tubes[a]+1)
+            precision = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
+            AP[a] = voc_ap(recall,precision)
+            tp /= len(result)
+            fp /= len(result)
+            AUC[a] = auc(fp,tp)
+            ptr_str = 'Action {:02d} AP = {:0.5f} AIOU {:0.5f} AUC {:0.5f} GT {:03d} total det {:02d} correct det {:02d} {:s}\n'\
+                 .format(a, AP[a],AIoU[a],AUC[a],total_num_gt_tubes[a],cc[a],cdet,actions[a])
+            # print(ptr_str)
+            outfile.write(ptr_str)
+
+        acc = np.mean(np.array(preds)==np.array(gts))
+        mAP = np.mean(AP)
+        mAIoU = np.mean(AIoU)
+        mAUC = np.mean(AUC)
+
+        ptr_str = 'IOUTH {:0.2f} Mean AP {:0.2f} meanAIoU {:0.3f} meanAUC {:0.3f} accuracy {:0.3f}\n'.format(iouth,mAP,mAIoU,mAUC,acc)
         print(ptr_str)
         outfile.write(ptr_str)
-
-    acc = np.mean(np.array(preds)==np.array(gts))
-    mAP = np.mean(AP)
-    mAIoU = np.mean(AIoU)
-
-    ptr_str = 'Mean AP {:0.2f} meanAIoU {:0.3f} accuracy {:0.3f}\n'.format(mAP,mAIoU,acc)
-    print(ptr_str)
-    outfile.write(ptr_str)
-
-    return mAP,mAIoU,acc,AP
-
+    return 
 
 # smooth tubes and evaluate them
 def getTubes(allPath,video_id,annot_map):
@@ -763,9 +781,10 @@ def getTubes(allPath,video_id,annot_map):
     xmldata = convert2eval(smoothedtubes, min_num_frames, topk)
 
     # evaluate
-    # iouths = [0.2] + [0.5 + 0.05*i for i in range(10)]
-    iouth = args.iou_thresh
-    return get_PR_curve(annot, xmldata, iouth),xmldata
+    # iouth = args.iou_thresh
+    for iouth in IoUTHs:
+        get_PR_curve(annot, xmldata, iouth)
+    return 
 
 def drawTubes(xmldata,output_dir,frames):
     dt_tubes = sort_detection(xmldata)
@@ -815,21 +834,15 @@ def process_video_result(video_result,outfile,iteration,annot_map):
     allPath = actionPath(frame_det_res)
 
     t2 = time.perf_counter()
-    res,xmldata = getTubes(allPath,video_id,annot_map)
-
-    t3 = time.perf_counter()
-    # drawTubes(xmldata,output_dir,frames)
-    xmldata = None
+    getTubes(allPath,video_id,annot_map)
 
     tf = time.perf_counter()
 
     print('Gen path {:0.3f}'.format(t2 - t1),
-        ', gen tubes {:0.3f}'.format(t3 - t2),
-        ', draw tubes {:0.3f}'.format(tf - t3),
-        ', total time {:0.3f}'.format(tf - t1),
-        ', result',res)
-    if video_id>0 and video_id%100 == 0:
-        mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
+        ', gen tubes {:0.3f}'.format(tf - t2),
+        ', total time {:0.3f}'.format(tf - t1))
+    if video_id>0 and video_id%10 == 0:
+        evaluate_tubes(outfile)
 
 def update_annot_map(annot_map,old_labels,new_labels):
     # record transform
@@ -981,7 +994,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 te = time.perf_counter()
                 print('NMS stuff Time {:0.3f}'.format(te - tf))
     print('Evaluate tubes:')
-    mAP,mAIoU,acc,AP = evaluate_tubes(outfile)
+    evaluate_tubes(outfile)
 
     print('Evaluating detections for itration number ', iteration)
 
