@@ -80,11 +80,14 @@ def compute_iou(cls_gt_boxes, box):
 
     return ious
 
-def evaluate_detections(gt_boxes, det_boxes, CLASSES=[], iou_thresh=0.5):
+def evaluate_detections(gt_boxes, det_boxes, CLASSES=[], iou_thresh=0.5, det_rot=None):
 
     ap_strs = []
     num_frames = len(gt_boxes)
     print('Evaluating for ', num_frames, 'frames')
+    if det_rot is not None:
+        det_all = np.ones((4,8), dtype=np.float32)
+        cnt_all = np.zeros((4,8), dtype=np.float32)
     ap_all = np.zeros(len(CLASSES), dtype=np.float32)
     for cls_ind, cls in enumerate(CLASSES): # loop over each class 'cls'
         scores = np.zeros(num_frames * 220)
@@ -116,6 +119,14 @@ def evaluate_detections(gt_boxes, det_boxes, CLASSES=[], iou_thresh=0.5):
                             istp[det_count] = 1 # set current detection index (det_count)
                             #  to 1 if it is true postive example
                         det_count += 1
+
+                        if det_rot is not None:
+                            rot_x,rot_y,rot_z = det_rot[cls_ind][nf]
+                            y = int(4*(rot_y/np.pi + 0.5))
+                            z = int(8*(rot_z/(2*np.pi) + 0.5))
+                            det_all[y][z] += 1
+                            if ispositive:
+                                cnt_all[y][z] += 1
         
         scores = scores[:det_count]
         istp = istp[:det_count]
@@ -132,7 +143,9 @@ def evaluate_detections(gt_boxes, det_boxes, CLASSES=[], iou_thresh=0.5):
         # print(cls_ind,CLASSES[cls_ind], cls_ap)
         ap_str = str(CLASSES[cls_ind]) + ' : ' + str(num_postives) + ' : ' + str(det_count) + ' : ' + str(cls_ap)
         ap_strs.append(ap_str)
-
+    if det_rot is not None:
+        cnt_all /= det_all
+        print(cnt_all)
     # print ('mean ap ', np.mean(ap_all))
     return np.mean(ap_all), ap_all, ap_strs
 

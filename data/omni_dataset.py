@@ -334,6 +334,9 @@ class OmniDataset(data.Dataset):
         img, label, index = self._transform_item(idx)
         return img, label, index
 
+    def get_rotation(self, video_id):
+        return self.vid2rot[video_id]
+
     def _transform_item(self, idx):
         annot_info = self.ids[idx]
         video_id = annot_info[0]

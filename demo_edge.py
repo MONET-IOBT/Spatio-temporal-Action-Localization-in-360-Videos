@@ -930,6 +930,8 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                     fps = frame_level_cnt/frame_level_time
                     print("Frame-level detection FPS:",fps)
                     process_video_result(video_result,outfile,iteration,annot_map)
+                    frame_level_time = 0
+                    frame_level_cnt = 0
                     annot_map = {}
                     video_result['data'] = []
                     video_result['frame'] = []

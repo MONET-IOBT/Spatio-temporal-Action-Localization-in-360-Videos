@@ -50,8 +50,8 @@ parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to tra
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
-parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -638,10 +638,15 @@ for iouth in IoUTHs:
     for a in range(len(CLASSES)):
         allscore[iouth][a] = np.zeros((10000,2))
     averageIoU[iouth] = np.zeros(len(CLASSES))
-preds = []
-gts = []
+preds = {}
+gts = {}
+for i in range(10):
+    preds[i] = []
+    gts[i] = []
+tubeGenTime = []
+frameLevelTime = []
 
-def get_PR_curve(annot, xmldata, iouth):
+def get_PR_curve(annot, xmldata, checkpoint):
     numActions = len(CLASSES)
     maxscore = -10000
     # annotName = annot[1][0]
@@ -676,35 +681,37 @@ def get_PR_curve(annot, xmldata, iouth):
         if dt_tubes['score'][dtind] > maxscore:
             pred = dt_label
             maxscore = dt_tubes['score'][dtind]
-        # cc counts the number of detections per class
-        cc[dt_label] += 1
-        assert(cc[dt_label]<10000)
 
-        ioumax = -10000
-        maxgtind = 0
-        for gtind in range(num_gt_tubes):
-            action_id = gt_tubes[gtind][2] - 1#class
-            # if this gt tube is not covered and has the same label as this detected tube
-            if (not covered_gt_tubes[gtind]) and dt_label == action_id:
-                gt_fnr = range(gt_tubes[gtind][0][0][0] - gt_tubes[gtind][1][0][0] + 1)
-                gt_bb = gt_tubes[gtind][3]
-                iou = compute_spatial_temporal_iou(gt_fnr,gt_bb,dt_fnr,dt_bb)
-                if iou > ioumax:
-                    # find the best possible gttube based on stiou
-                    ioumax = iou
-                    maxgtind = gtind
+        if checkpoint == 9:
+            # cc counts the number of detections per class
+            cc[dt_label] += 1
+            assert(cc[dt_label]<10000)
 
-        if ioumax > iouth:
-            covered_gt_tubes[gtind] = 1
-            # records the score,T/F of each dt tube at every step for every class
-            allscore[iouth][dt_label][cc[dt_label],:] = [dt_tubes['score'][dtind],1]
-            # max iou with rest gt tubes
-            averageIoU[iouth][dt_label] += ioumax
-        else:
-            allscore[iouth][dt_label][cc[dt_label],:] = [dt_tubes['score'][dtind],0]
-    preds.append(pred)
-    gts.append(gt)
-    return pred == gt
+            ioumax = -10000
+            maxgtind = 0
+            for gtind in range(num_gt_tubes):
+                action_id = gt_tubes[gtind][2] - 1#class
+                # if this gt tube is not covered and has the same label as this detected tube
+                if (not covered_gt_tubes[gtind]) and dt_label == action_id:
+                    gt_fnr = range(gt_tubes[gtind][0][0][0] - gt_tubes[gtind][1][0][0] + 1)
+                    gt_bb = gt_tubes[gtind][3]
+                    iou = compute_spatial_temporal_iou(gt_fnr,gt_bb,dt_fnr,dt_bb)
+                    if iou > ioumax:
+                        # find the best possible gttube based on stiou
+                        ioumax = iou
+                        maxgtind = gtind
+
+            for iouth in IoUTHs:
+                if ioumax > iouth:
+                    covered_gt_tubes[gtind] = 1
+                    # records the score,T/F of each dt tube at every step for every class
+                    allscore[iouth][dt_label][cc[dt_label],:] = [dt_tubes['score'][dtind],1]
+                    # max iou with rest gt tubes
+                    averageIoU[iouth][dt_label] += ioumax
+                else:
+                    allscore[iouth][dt_label][cc[dt_label],:] = [dt_tubes['score'][dtind],0]
+    preds[checkpoint].append(pred)
+    gts[checkpoint].append(gt)
 
 def evaluate_tubes(outfile):
     actions = CLASSES
@@ -741,19 +748,26 @@ def evaluate_tubes(outfile):
             # print(ptr_str)
             outfile.write(ptr_str)
 
-        acc = np.mean(np.array(preds)==np.array(gts))
         mAP = np.mean(AP)
         mAIoU = np.mean(AIoU)
         mAUC = np.mean(AUC)
 
-        ptr_str = 'IOUTH {:0.2f} Mean AP {:0.2f} meanAIoU {:0.3f} meanAUC {:0.3f} accuracy {:0.3f}\n'.format(iouth,mAP,mAIoU,mAUC,acc)
+        ptr_str = 'IOUTH {:0.2f} Mean AP {:0.2f} meanAIoU {:0.3f} meanAUC {:0.3f}\n'.format(iouth,mAP,mAIoU,mAUC)
         print(ptr_str)
         outfile.write(ptr_str)
+
+    acc = np.zeros(10)
+    for i in range(10):
+        acc[i] = np.mean(np.array(preds[i])==np.array(gts[i]))
+    ptr_str = "Accuracy over time:" + str(acc) + '\n'
+    print(ptr_str)
+    outfile.write(ptr_str)
+    ptr_str = "Avg tube gen time:" + str(np.mean(tubeGenTime)) + "," + str(np.mean(frameLevelTime)) + '\n'
+    print(ptr_str)
+    outfile.write(ptr_str)
     return 
 
-# smooth tubes and evaluate them
-def getTubes(allPath,video_id,annot_map):
-    # read all groundtruth actions
+def getGTAnnot(annot_map,video_id):
     annot = args.final_annot['annot'][0][video_id]
 
     if args.dataset == 'ucf24':
@@ -769,7 +783,10 @@ def getTubes(allPath,video_id,annot_map):
                 else:
                     new_boxes = torch.cat((new_boxes,new_box),0)
             annot[2][0][tid][3] = new_boxes
+    return annot
 
+# smooth tubes and evaluate them
+def getTubes(allPath,annot,checkpoint):
     # smooth action path
     alpha = 3
     numActions = len(CLASSES)
@@ -781,9 +798,7 @@ def getTubes(allPath,video_id,annot_map):
     xmldata = convert2eval(smoothedtubes, min_num_frames, topk)
 
     # evaluate
-    # iouth = args.iou_thresh
-    for iouth in IoUTHs:
-        get_PR_curve(annot, xmldata, iouth)
+    get_PR_curve(annot, xmldata, checkpoint)
     return 
 
 def drawTubes(xmldata,output_dir,frames):
@@ -830,17 +845,20 @@ def process_video_result(video_result,outfile,iteration,annot_map):
     frame_save_dir = args.save_root+'detections/CONV-rgb-'+args.listid+'-'+str(iteration).zfill(6)+'/'
     output_dir = frame_save_dir+videoname
 
-    t1 = time.perf_counter()
-    allPath = actionPath(frame_det_res)
+    annot = getGTAnnot(annot_map,video_id)
 
-    t2 = time.perf_counter()
-    getTubes(allPath,video_id,annot_map)
+    stride = int(len(frame_det_res)/10)
+    ends = [stride*i for i in range(1,10)] + [len(frame_det_res)]
 
-    tf = time.perf_counter()
+    for i,end in enumerate(ends):
+        t1 = time.perf_counter()
+        allPath = actionPath(frame_det_res[:end])
+        getTubes(allPath,annot,i)
+        t2 = time.perf_counter()
+        if i == 9:
+            tubeGenTime.append((t2-t1)/len(frame_det_res))
+            print('Tube gen time:',(t2-t1)/len(frame_det_res))
 
-    print('Gen path {:0.3f}'.format(t2 - t1),
-        ', gen tubes {:0.3f}'.format(tf - t2),
-        ', total time {:0.3f}'.format(tf - t1))
     if video_id>0 and video_id%10 == 0:
         evaluate_tubes(outfile)
 
@@ -862,6 +880,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     num_images = len(dataset)
     video_list = dataset.video_list
     det_boxes = [[] for _ in range(len(CLASSES))]
+    det_rot = [[] for _ in range(len(CLASSES))]
     gt_boxes = []
     print_time = True
     batch_iterator = None
@@ -918,6 +937,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
             conf_preds = output[1]
             prior_data = output[2]
             tf = time.perf_counter()
+            frameLevelTime.append(tf-t1)
 
             if print_time and val_itr%val_step == 0:
                 torch.cuda.synchronize()
@@ -936,6 +956,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                 annot_info = image_ids[index]
 
                 frame_num = annot_info[1]; video_id = annot_info[0]; videoname = video_list[video_id]
+                rot = dataset.get_rotation(video_id)
                 # check if this id is different from the previous one
                 if (video_id != pre_video_id) and (len(video_result['data']) > 0):
                     # process this video
@@ -965,6 +986,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
                     if scores.dim() == 0 or scores.shape[0] == 0:
                         # print(len(''), ' dim ==0 ')
                         det_boxes[cl_ind - 1].append(np.asarray([]))
+                        det_rot[cl_ind - 1].append(rot)
                         continue
                     boxes = decoded_boxes.clone()
                     l_mask = c_mask.unsqueeze(1).expand_as(boxes)
@@ -981,6 +1003,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
 
                     cls_dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=True)
                     det_boxes[cl_ind - 1].append(cls_dets)
+                    det_rot[cl_ind - 1].append(rot)
 
                 count += 1
             if val_itr%val_step == 0:
@@ -998,7 +1021,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
 
     print('Evaluating detections for itration number ', iteration)
 
-    return evaluate_detections(gt_boxes, det_boxes, CLASSES, iou_thresh=thresh)
+    return evaluate_detections(gt_boxes, det_boxes, CLASSES, iou_thresh=thresh, det_rot=det_rot)
 
 
 def main():
