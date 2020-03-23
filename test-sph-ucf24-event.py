@@ -861,7 +861,7 @@ def process_video_result(video_result,outfile,iteration,annot_map):
             tubeGenTime.append((t2-t1)/len(frame_det_res))
             print('Tube gen time:',(t2-t1)/len(frame_det_res))
 
-    if video_id>0 and video_id%10 == 0:
+    if video_id>0 and video_id%100 == 0:
         evaluate_tubes(outfile)
 
 def update_annot_map(annot_map,old_labels,new_labels):
