@@ -659,12 +659,6 @@ def get_PR_curve(annot, xmldata, checkpoint):
     num_detection = len(dt_tubes['class'])
     num_gt_tubes = len(gt_tubes)
 
-    for gtind in range(num_gt_tubes):
-        action_id = gt_tubes[gtind][2][0][0]
-        assert(action_id > 0)
-        action_id -= 1
-        total_num_gt_tubes[action_id] += 1
-
     pred = -1
     gt = action_id
     dt_labels = dt_tubes['class']
@@ -752,7 +746,7 @@ def evaluate_tubes(outfile):
         mAIoU = np.mean(AIoU)
         mAUC = np.mean(AUC)
 
-        ptr_str = 'IOUTH {:0.2f} Mean AP {:0.2f} meanAIoU {:0.3f} meanAUC {:0.3f}\n'.format(iouth,mAP,mAIoU,mAUC)
+        ptr_str = 'IOUTH {:0.2f} Mean AP {:0.3f} meanAIoU {:0.3f} meanAUC {:0.3f}\n'.format(iouth,mAP,mAIoU,mAUC)
         print(ptr_str)
         outfile.write(ptr_str)
 
@@ -846,6 +840,14 @@ def process_video_result(video_result,outfile,iteration,annot_map):
     output_dir = frame_save_dir+videoname
 
     annot = getGTAnnot(annot_map,video_id)
+
+    # count gt tubes
+    gt_tube = annot[2][0]
+    for gtind in range(len(gt_tube)):
+        action_id = gt_tube[gtind][2][0][0]
+        assert(action_id > 0)
+        action_id -= 1
+        total_num_gt_tubes[action_id] += 1
 
     stride = int(len(frame_det_res)/10)
     ends = [stride*i for i in range(1,10)] + [len(frame_det_res)]
