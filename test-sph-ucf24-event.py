@@ -660,7 +660,7 @@ def get_PR_curve(annot, xmldata, checkpoint):
     num_gt_tubes = len(gt_tubes)
 
     pred = -1
-    gt = action_id
+    gt = action_id[0][0]
     dt_labels = dt_tubes['class']
     covered_gt_tubes = np.zeros(num_gt_tubes)
     for dtind in range(num_detection):
@@ -706,6 +706,7 @@ def get_PR_curve(annot, xmldata, checkpoint):
                     allscore[iouth][dt_label][cc[dt_label],:] = [dt_tubes['score'][dtind],0]
     preds[checkpoint].append(pred)
     gts[checkpoint].append(gt)
+    return int(pred==gt)
 
 def evaluate_tubes(outfile):
     actions = CLASSES
@@ -755,6 +756,13 @@ def evaluate_tubes(outfile):
         acc[i] = np.mean(np.array(preds[i])==np.array(gts[i]))
     ptr_str = "Accuracy over time:" + str(acc) + '\n'
     print(ptr_str)
+    cor_num = np.zeros(10)
+    tot_num = np.zeros(10)
+    for i in range(10):
+        cor_num[i] = np.sum(np.array(preds[i])==np.array(gts[i]))
+        tot_num[i] = len(preds[i])
+    print(cor_num)
+    print(tot_num)
     outfile.write(ptr_str)
     ptr_str = "Avg tube gen time:" + str(np.mean(tubeGenTime)) + "," + str(np.mean(frameLevelTime)) + '\n'
     print(ptr_str)
@@ -792,8 +800,8 @@ def getTubes(allPath,annot,checkpoint):
     xmldata = convert2eval(smoothedtubes, min_num_frames, topk)
 
     # evaluate
-    get_PR_curve(annot, xmldata, checkpoint)
-    return 
+    res = get_PR_curve(annot, xmldata, checkpoint)
+    return res
 
 def drawTubes(xmldata,output_dir,frames):
     dt_tubes = sort_detection(xmldata)
@@ -852,16 +860,18 @@ def process_video_result(video_result,outfile,iteration,annot_map):
     stride = int(len(frame_det_res)/10)
     ends = [stride*i for i in range(1,10)] + [len(frame_det_res)]
 
+    results = []
     for i,end in enumerate(ends):
         t1 = time.perf_counter()
         allPath = actionPath(frame_det_res[:end])
-        getTubes(allPath,annot,i)
+        res = getTubes(allPath,annot,i)
+        results.append(res)
         t2 = time.perf_counter()
         if i == 9:
             tubeGenTime.append((t2-t1)/len(frame_det_res))
-            print('Tube gen time:',(t2-t1)/len(frame_det_res))
+    print('Results:',results)
 
-    if video_id>0 and video_id%100 == 0:
+    if video_id>0 and video_id%10 == 9:
         evaluate_tubes(outfile)
 
 def update_annot_map(annot_map,old_labels,new_labels):
