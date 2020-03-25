@@ -624,6 +624,7 @@ total_num_gt_tubes = [0 for _ in range(len(CLASSES))]
 averageIoU = np.zeros(len(CLASSES))
 preds = []
 gts = []
+tubeGenTime = []
 
 def get_PR_curve(annot, xmldata, iouth):
     numActions = len(CLASSES)
@@ -823,14 +824,15 @@ def process_video_result(video_result,outfile,iteration,annot_map):
 
     t2 = time.perf_counter()
     tmp,xmldata = getTubes(allPath,video_id,annot_map)
-    res,gt_label = tmp
+    # res,gt_label = tmp
 
-    t3 = time.perf_counter()
-    drawTubes(xmldata,output_dir,frames,gt_label)
+    # t3 = time.perf_counter()
+    # drawTubes(xmldata,output_dir,frames,gt_label)
 
     tf = time.perf_counter()
+    tubeGenTime.append((tf-t1)/len(frame_det_res))
 
-    print("Processing:",videoname,'id=',video_id,"total frames:",len(frame_det_res),'total time {:0.3f}'.format(tf - t1))
+    print(videoname,'id=',video_id,"total frames:",len(frame_det_res),'total time {:0.3f}'.format(np.mean(tubeGenTime)))
     # print("Detecting event:",videoname,
     #     'total time {:0.3f}, time per frame {:0.3f}'.format(tf - t1,(tf-t1)/len(frame_det_res)),
     #     'Success' if res else 'Failure')
