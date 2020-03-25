@@ -824,7 +824,7 @@ def process_video_result(video_result,outfile,iteration,annot_map):
 
     t2 = time.perf_counter()
     tmp,xmldata = getTubes(allPath,video_id,annot_map)
-    # res,gt_label = tmp
+    res,gt_label = tmp
 
     t3 = time.perf_counter()
     drawTubes(xmldata,output_dir,frames,gt_label)
