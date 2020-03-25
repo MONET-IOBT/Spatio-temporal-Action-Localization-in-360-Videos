@@ -801,13 +801,13 @@ def drawTubes(xmldata,output_dir,frames,gt_label):
 
             npimg = np.array(img)
 
-            result, frame = cv2.imencode('.jpg', npimg, encode_param)
-            data = pickle.dumps(frame, 0)
-            size = len(data)
-
-            args.client_socket.sendall(struct.pack(">L", size) + 
-                                        struct.pack(">L", dt_label) + 
-                                        struct.pack(">L", gt_label) + data)
+            while True:
+                result, frame = cv2.imencode('.jpg', npimg, encode_param)
+                data = pickle.dumps(frame, 0)
+                size = len(data)
+                args.client_socket.sendall(struct.pack(">L", size) + 
+                                            struct.pack(">L", dt_label) + 
+                                            struct.pack(">L", gt_label) + data)
             break
 
 def process_video_result(video_result,outfile,iteration,annot_map):

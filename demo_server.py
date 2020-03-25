@@ -8,6 +8,7 @@ import zlib
 import pickle,os
 import numpy as np
 import argparse
+import time
 from data import UCF24_CLASSES
 import matplotlib.pyplot as plt
 CLASSES = UCF24_CLASSES 
@@ -40,6 +41,10 @@ if __name__ == '__main__':
 	if not os.path.isdir(output_dir):
 		os.makedirs(output_dir)
 	dtind = 0
+	t1 = time.perf_counter()
+
+	total_time = 0
+	time_cnt = 0
 
 	while True:
 		while len(data) < payload_size:
@@ -76,15 +81,21 @@ if __name__ == '__main__':
         				CLASSES[class_label] + '(' + CLASSES[gt_label] + ').png'
 		dtind += 1
 
-		img = Image.fromarray(frame.astype(np.uint8))
-		img.save(output_tube_dir)
+		tf = time.perf_counter()
+		total_time += (tf-t1)
+		time_cnt += 1
+		avg_time = total_time/time_cnt
+		t1 = tf
+
+		# img = Image.fromarray(frame.astype(np.uint8))
+		# img.save(output_tube_dir)
 
 		print('Event detected:',CLASSES[class_label],'(',CLASSES[gt_label],')',
-        				'Success' if class_label==gt_label else 'Failure')
+        				'Success' if class_label==gt_label else 'Failure',avg_time)
 		
-		if args.showImage:
-			b,g,r = cv2.split(frame)
-			frame_rgb = cv2.merge((r,g,b))
+		# if args.showImage:
+		# 	b,g,r = cv2.split(frame)
+		# 	frame_rgb = cv2.merge((r,g,b))
 
-			cv2.imshow('Event detection result',frame_rgb)
-			cv2.waitKey(1)
+		# 	cv2.imshow('Event detection result',frame_rgb)
+		# 	cv2.waitKey(1)

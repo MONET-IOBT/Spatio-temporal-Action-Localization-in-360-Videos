@@ -50,8 +50,8 @@ parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to tra
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
-parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -877,7 +877,7 @@ def update_annot_map(annot_map,old_labels,new_labels):
 def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_classes, outfile, thresh=0.5 ):
     """ Test a SSD network on an Action image database. """
 
-    val_data_loader = data.DataLoader(dataset, args.batch_size, num_workers=args.num_workers,
+    val_data_loader = torch.utils.data.DataLoader(dataset, args.batch_size, num_workers=args.num_workers,
                             shuffle=False, collate_fn=detection_collate, pin_memory=True)
     image_ids = dataset.ids
     save_ids = []
@@ -906,7 +906,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
     video_result['frame'] = []
     import collections
     annot_map = collections.defaultdict(dict)
-    encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
+    encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 100]
     with torch.no_grad():
         for val_itr in range(len(val_data_loader)):
             if not batch_iterator:
@@ -922,8 +922,16 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
             if args.lossy:
                 lossy_images = None
                 for image in images:
+                    import sys
                     lossy_image = image.permute(1,2,0).numpy()
+                    data = pickle.dumps(lossy_image, 0)
+                    size = len(data)
+                    print('original size:',size,sys.getsizeof(data))
                     result, lossy_image = cv2.imencode('.jpg', lossy_image, encode_param)
+                    data = pickle.dumps(lossy_image, 0)
+                    size = len(data)
+                    print('compressed size:',size,sys.getsizeof(data))
+                    exit(0)
                     lossy_image = cv2.imdecode(lossy_image, cv2.IMREAD_COLOR)
                     lossy_image = torch.from_numpy(lossy_image).float().permute(2,0,1).unsqueeze(0)
                     if lossy_images is None:
