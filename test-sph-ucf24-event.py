@@ -638,15 +638,12 @@ for iouth in IoUTHs:
     for a in range(len(CLASSES)):
         allscore[iouth][a] = np.zeros((10000,2))
     averageIoU[iouth] = np.zeros(len(CLASSES))
-preds = {}
-gts = {}
-for i in range(10):
-    preds[i] = []
-    gts[i] = []
+preds = []
+gts = []
 tubeGenTime = []
 frameLevelTime = []
 
-def get_PR_curve(annot, xmldata, checkpoint):
+def get_PR_curve(annot, xmldata):
     numActions = len(CLASSES)
     maxscore = -10000
     # annotName = annot[1][0]
@@ -672,40 +669,41 @@ def get_PR_curve(annot, xmldata, checkpoint):
         dt_label = dt_labels[dtind] - 1
         # the tube having the max score decides
         # the label of the video
+        print(dt_label,dt_tubes['score'][dtind])
         if dt_tubes['score'][dtind] > maxscore:
             pred = dt_label
             maxscore = dt_tubes['score'][dtind]
 
-        if checkpoint == 9:
-            # cc counts the number of detections per class
-            cc[dt_label] += 1
-            assert(cc[dt_label]<10000)
+        # cc counts the number of detections per class
+        cc[dt_label] += 1
+        assert(cc[dt_label]<10000)
 
-            ioumax = -10000
-            maxgtind = 0
-            for gtind in range(num_gt_tubes):
-                action_id = gt_tubes[gtind][2] - 1#class
-                # if this gt tube is not covered and has the same label as this detected tube
-                if (not covered_gt_tubes[gtind]) and dt_label == action_id:
-                    gt_fnr = range(gt_tubes[gtind][0][0][0] - gt_tubes[gtind][1][0][0] + 1)
-                    gt_bb = gt_tubes[gtind][3]
-                    iou = compute_spatial_temporal_iou(gt_fnr,gt_bb,dt_fnr,dt_bb)
-                    if iou > ioumax:
-                        # find the best possible gttube based on stiou
-                        ioumax = iou
-                        maxgtind = gtind
+        ioumax = -10000
+        maxgtind = 0
+        for gtind in range(num_gt_tubes):
+            action_id = gt_tubes[gtind][2] - 1#class
+            # if this gt tube is not covered and has the same label as this detected tube
+            if (not covered_gt_tubes[gtind]) and dt_label == action_id:
+                gt_fnr = range(gt_tubes[gtind][0][0][0] - gt_tubes[gtind][1][0][0] + 1)
+                gt_bb = gt_tubes[gtind][3]
+                iou = compute_spatial_temporal_iou(gt_fnr,gt_bb,dt_fnr,dt_bb)
+                if iou > ioumax:
+                    # find the best possible gttube based on stiou
+                    ioumax = iou
+                    maxgtind = gtind
 
-            for iouth in IoUTHs:
-                if ioumax > iouth:
-                    covered_gt_tubes[gtind] = 1
-                    # records the score,T/F of each dt tube at every step for every class
-                    allscore[iouth][dt_label][cc[dt_label],:] = [dt_tubes['score'][dtind],1]
-                    # max iou with rest gt tubes
-                    averageIoU[iouth][dt_label] += ioumax
-                else:
-                    allscore[iouth][dt_label][cc[dt_label],:] = [dt_tubes['score'][dtind],0]
-    preds[checkpoint].append(pred)
-    gts[checkpoint].append(gt)
+        for iouth in IoUTHs:
+            if ioumax > iouth:
+                covered_gt_tubes[gtind] = 1
+                # records the score,T/F of each dt tube at every step for every class
+                allscore[iouth][dt_label][cc[dt_label],:] = [dt_tubes['score'][dtind],1]
+                # max iou with rest gt tubes
+                averageIoU[iouth][dt_label] += ioumax
+            else:
+                allscore[iouth][dt_label][cc[dt_label],:] = [dt_tubes['score'][dtind],0]
+    preds.append(pred)
+    gts.append(gt)
+    print(pred,gt)
     return int(pred==gt)
 
 def evaluate_tubes(outfile):
@@ -751,18 +749,19 @@ def evaluate_tubes(outfile):
         print(ptr_str)
         outfile.write(ptr_str)
 
-    acc = np.zeros(10)
-    for i in range(10):
-        acc[i] = np.mean(np.array(preds[i])==np.array(gts[i]))
-    ptr_str = "Accuracy over time:" + str(acc) + '\n'
+    # acc = np.zeros(10)
+    # for i in range(10):
+    #     acc[i] = np.mean(np.array(preds[i])==np.array(gts[i]))
+    acc = np.mean(np.array(preds)==np.array(gts))
+    ptr_str = "Accuracy:" + str(acc) + '\n'
     print(ptr_str)
-    cor_num = np.zeros(10)
-    tot_num = np.zeros(10)
-    for i in range(10):
-        cor_num[i] = np.sum(np.array(preds[i])==np.array(gts[i]))
-        tot_num[i] = len(preds[i])
-    print(cor_num)
-    print(tot_num)
+    # cor_num = np.zeros(10)
+    # tot_num = np.zeros(10)
+    # for i in range(10):
+    #     cor_num[i] = np.sum(np.array(preds[i])==np.array(gts[i]))
+    #     tot_num[i] = len(preds[i])
+    # print(cor_num)
+    # print(tot_num)
     outfile.write(ptr_str)
     ptr_str = "Avg tube gen time:" + str(np.mean(tubeGenTime)) + "," + str(np.mean(frameLevelTime)) + '\n'
     print(ptr_str)
@@ -788,7 +787,7 @@ def getGTAnnot(annot_map,video_id):
     return annot
 
 # smooth tubes and evaluate them
-def getTubes(allPath,annot,checkpoint):
+def getTubes(allPath,annot):
     # smooth action path
     alpha = 3
     numActions = len(CLASSES)
@@ -800,7 +799,7 @@ def getTubes(allPath,annot,checkpoint):
     xmldata = convert2eval(smoothedtubes, min_num_frames, topk)
 
     # evaluate
-    res = get_PR_curve(annot, xmldata, checkpoint)
+    res = get_PR_curve(annot, xmldata)
     return res
 
 def drawTubes(xmldata,output_dir,frames):
@@ -857,21 +856,20 @@ def process_video_result(video_result,outfile,iteration,annot_map):
         action_id -= 1
         total_num_gt_tubes[action_id] += 1
 
-    stride = int(len(frame_det_res)/10)
-    ends = [stride*i for i in range(1,10)] + [len(frame_det_res)]
+    # stride = int(len(frame_det_res)/10)
+    # ends = [stride*i for i in range(1,10)] + [len(frame_det_res)]
 
-    results = []
-    for i,end in enumerate(ends):
-        t1 = time.perf_counter()
-        allPath = actionPath(frame_det_res[:end])
-        res = getTubes(allPath,annot,i)
-        results.append(res)
-        t2 = time.perf_counter()
-        if i == 9:
-            tubeGenTime.append((t2-t1)/len(frame_det_res))
-    print('Results:',results)
+    # results = []
+    # for i,end in enumerate(ends):
+    #     if i < 9: continue
+    t1 = time.perf_counter()
+    allPath = actionPath(frame_det_res)
+    res = getTubes(allPath,annot)
+    t2 = time.perf_counter()
+    tubeGenTime.append((t2-t1)/len(frame_det_res))
+    # print('Results:',results)
 
-    if video_id>0 and video_id%10 == 9:
+    if len(tubeGenTime)%10 == 0:
         evaluate_tubes(outfile)
 
 def update_annot_map(annot_map,old_labels,new_labels):
