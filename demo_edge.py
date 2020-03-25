@@ -12,7 +12,7 @@ import torch
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
 from data.omni_dataset import OmniUCF24,OmniJHMDB
-from data import AnnotationTransform, UCF24Detection, JHMDB, BaseTransform, UCF24_CLASSES, JHMDB_CLASSES, detection_collate, v1,v2,v3,v4,v5
+from data import AnnotationTransform, UCF24Detection, BaseTransform, UCF24_CLASSES, detection_collate, v1,v2,v3,v4,v5
 from model.fpnssd.net import FPNSSD512
 from model.sph_ssd import build_vgg_ssd
 from model.vggssd.net import SSD512
