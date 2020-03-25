@@ -867,7 +867,7 @@ def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_class
 
     # connect to server
     args.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    args.client_socket.connect(('10.0.1.240', 8485))
+    args.client_socket.connect(('10.0.1.240', 8487))
     connection = args.client_socket.makefile('wb')
     print('Connected.')
 
