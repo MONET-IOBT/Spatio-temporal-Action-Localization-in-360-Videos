@@ -172,7 +172,7 @@ class OmniDataset(data.Dataset):
         self.ids = dataset.ids
         self.root = dataset.root
         # self.annot_map = collections.defaultdict(dict)
-        self.user = '/home/monet/'
+        self.user = '/home/picocluster/'
 
         self.aug = None
         if fix_aug:
@@ -427,7 +427,7 @@ class OmniDataset(data.Dataset):
         return new_labels
 
 
-from data import UCF24Detection, AnnotationTransform, BaseTransform, JHMDB
+from data import UCF24Detection, AnnotationTransform, BaseTransform#, JHMDB
 
 class OmniUCF24(OmniDataset):
     def __init__(self, root, image_set, transform=None, target_transform=None,
