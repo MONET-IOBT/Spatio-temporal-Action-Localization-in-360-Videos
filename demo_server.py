@@ -36,7 +36,7 @@ if __name__ == '__main__':
 	data = b""
 	payload_size = struct.calcsize(">L")
 
-	output_dir = '/home/bo/research/dataset/ucf24/detections'
+	output_dir = '/home/picocluster/research/dataset/ucf24/detections'
 	if not os.path.isdir(output_dir):
 		os.makedirs(output_dir)
 	dtind = 0
