@@ -24,7 +24,7 @@ import model.yolov3.test as test
 from model.yolov3.models import *
 from model.yolov3.utils.datasets import *
 from model.yolov3.utils.utils import *
-
+import torch.nn.init as init
 import torch.utils.data as data
 from layers.sph_box_utils import decode, nms
 from utils.evaluation import evaluate_detections
