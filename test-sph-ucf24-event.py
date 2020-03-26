@@ -869,6 +869,7 @@ def process_video_result(video_result,outfile,iteration,annot_map):
         res = getTubes(allPath,annot,i)
         results.append(res)
         t2 = time.perf_counter()
+        print(i,t2-t1)
         if i==9:
             tubeGenTime.append((t2-t1)/len(frame_det_res))
     print(len(tubeGenTime),results,tubeGenTime[-1])
