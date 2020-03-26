@@ -1053,15 +1053,48 @@ def main():
         log_file.write(exp_name + '\n')
         trained_model_path = args.save_root + 'cache/' + exp_name + '/ssd300_ucf24_' + repr(iteration) + '.pth'
         log_file.write(trained_model_path+'\n')
-        num_classes = len(CLASSES) + 1  #7 +1 background
+        args.num_classes = len(CLASSES) + 1  #7 +1 background
+        def xavier(param):
+            init.xavier_uniform(param)
+
+        def weights_init(m):
+            if isinstance(m, nn.Conv2d):
+                xavier(m.weight.data)
+                m.bias.data.zero_()
+
         if args.cfg['base'] == 'fpn':
-            net = FPNSSD512(num_classes, args.cfg)
-        else:
+            net = FPNSSD512(args.num_classes, args.cfg)
+        elif args.cfg['base'] == 'fpn_cube':
+            net = FPNSSD512CUBE(args.num_classes, args.cfg)
+        elif args.cfg['base'] == 'vgg16':
             if args.cfg['min_dim'][0] == 512:
-                net = SSD512(num_classes, args.cfg)
+                net = SSD512(args.num_classes, args.cfg)
+                net.loc_layers.apply(weights_init)
+                net.cls_layers.apply(weights_init)
             else:
-                net = build_vgg_ssd(num_classes, args.cfg)
-        net.load_state_dict(torch.load(trained_model_path))
+                net = build_vgg_ssd(args.num_classes, args.cfg)
+                net.loc.apply(weights_init)
+                net.conf.apply(weights_init)
+        elif args.cfg['base'] == 'fpn_mobile':
+            net = MobileFPNSSD512(args.num_classes, args.cfg)
+        elif args.cfg['base'] == 'yolov3':
+            net = Darknet('model/yolov3/cfg/yolov3-spp.cfg', arc='CE')
+        else:
+            return 
+
+        if args.input_type == 'fastOF':
+            print('Download pretrained brox flow trained model weights and place them at:::=> ',args.data_root + 'ucf24/train_data/brox_wieghts.pth')
+            pretrained_weights = args.data_root + 'ucf24/train_data/brox_wieghts.pth'
+            print('Loading base network...')
+            net.fpn.load_state_dict(torch.load(pretrained_weights))
+        elif args.cfg['base'] == 'vgg16' or args.cfg['base'] == 'fpn':
+            vgg_weights = torch.load(args.data_root +'ucf24/train_data/' + args.basenet)
+            print('Loading base network...')
+            net.load_weights(vgg_weights)
+
+        if args.net_type != 'conv2d' and (args.cfg['base'] == 'vgg16' or args.cfg['base'] == 'fpn'):
+            net.transform(args.net_type)
+
         net.eval()
         if args.cuda:
             net = net.cuda()
