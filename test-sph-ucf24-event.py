@@ -19,12 +19,12 @@ from model.vggssd.net import SSD512
 from model.fpnssd_cube.net import FPNSSD512CUBE
 from model.mobile_ssd_v1.net import MobileSSD512
 from model.mobile_fpnssd.net import MobileFPNSSD512
+import torch.nn.init as init
 # yolov3 stuff
 import model.yolov3.test as test
 from model.yolov3.models import *
 from model.yolov3.utils.datasets import *
 from model.yolov3.utils.utils import *
-import torch.nn.init as init
 import torch.utils.data as data
 from layers.sph_box_utils import decode, nms
 from utils.evaluation import evaluate_detections
@@ -864,17 +864,18 @@ def process_video_result(video_result,outfile,iteration,annot_map):
 
     results = []
     for i,end in enumerate(ends):
+        if args.version > 2 or args.net_type != 'conv2d':
+            if i<9:continue
         t1 = time.perf_counter()
         allPath = actionPath(frame_det_res[:end])
         res = getTubes(allPath,annot,i)
         results.append(res)
         t2 = time.perf_counter()
-        print(i,t2-t1)
         if i==9:
             tubeGenTime.append((t2-t1)/len(frame_det_res))
-    print(len(tubeGenTime),results,tubeGenTime[-1])
+    print(len(tubeGenTime),results)
 
-    if len(tubeGenTime)%10 == 0:
+    if len(tubeGenTime)%100 == 0:
         evaluate_tubes(outfile)
 
 def update_annot_map(annot_map,old_labels,new_labels):
@@ -1064,13 +1065,6 @@ def main():
         trained_model_path = args.save_root + 'cache/' + exp_name + '/ssd300_ucf24_' + repr(iteration) + '.pth'
         log_file.write(trained_model_path+'\n')
         args.num_classes = len(CLASSES) + 1  #7 +1 background
-        def xavier(param):
-            init.xavier_uniform(param)
-
-        def weights_init(m):
-            if isinstance(m, nn.Conv2d):
-                xavier(m.weight.data)
-                m.bias.data.zero_()
 
         if args.cfg['base'] == 'fpn':
             net = FPNSSD512(args.num_classes, args.cfg)
@@ -1079,18 +1073,15 @@ def main():
         elif args.cfg['base'] == 'vgg16':
             if args.cfg['min_dim'][0] == 512:
                 net = SSD512(args.num_classes, args.cfg)
-                net.loc_layers.apply(weights_init)
-                net.cls_layers.apply(weights_init)
             else:
                 net = build_vgg_ssd(args.num_classes, args.cfg)
-                net.loc.apply(weights_init)
-                net.conf.apply(weights_init)
         elif args.cfg['base'] == 'fpn_mobile':
             net = MobileFPNSSD512(args.num_classes, args.cfg)
         elif args.cfg['base'] == 'yolov3':
             net = Darknet('model/yolov3/cfg/yolov3-spp.cfg', arc='CE')
         else:
             return 
+        net.load_state_dict(torch.load(trained_model_path))
 
         net.eval()
         if args.cuda:
