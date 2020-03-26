@@ -877,7 +877,7 @@ def update_annot_map(annot_map,old_labels,new_labels):
 def test_net(net, save_root, exp_name, input_type, dataset, iteration, num_classes, outfile, thresh=0.5 ):
     """ Test a SSD network on an Action image database. """
 
-    val_data_loader = torch.utils.data.DataLoader(dataset, 1, num_workers=args.num_workers,
+    val_data_loader = torch.utils.data.DataLoader(dataset, args.batch_size, num_workers=args.num_workers,
                             shuffle=False, collate_fn=detection_collate, pin_memory=True)
     image_ids = dataset.ids
     save_ids = []
