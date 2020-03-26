@@ -1123,7 +1123,7 @@ def main():
         log_file.write('Testing net \n')
         final_annot_location = args.data_root + 'splitfiles/finalAnnots.mat'
         args.final_annot = sio.loadmat(final_annot_location)
-        mAP, ap_all, ap_strs = test_net(net, args.save_root, exp_name, args.input_type, dataset, iteration, num_classes, log_file)
+        mAP, ap_all, ap_strs = test_net(net, args.save_root, exp_name, args.input_type, dataset, iteration, args.num_classes, log_file)
         for ap_str in ap_strs:
             print(ap_str)
             log_file.write(ap_str + '\n')
