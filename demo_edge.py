@@ -801,13 +801,12 @@ def drawTubes(xmldata,output_dir,frames,gt_label):
 
             npimg = np.array(img)
 
-            while True:
-                result, frame = cv2.imencode('.jpg', npimg, encode_param)
-                data = pickle.dumps(frame, 0)
-                size = len(data)
-                args.client_socket.sendall(struct.pack(">L", size) + 
-                                            struct.pack(">L", dt_label) + 
-                                            struct.pack(">L", gt_label) + data)
+            result, frame = cv2.imencode('.jpg', npimg, encode_param)
+            data = pickle.dumps(frame, 0)
+            size = len(data)
+            args.client_socket.sendall(struct.pack(">L", size) + 
+                                        struct.pack(">L", dt_label) + 
+                                        struct.pack(">L", gt_label) + data)
             break
 
 def process_video_result(video_result,outfile,iteration,annot_map):
@@ -824,10 +823,10 @@ def process_video_result(video_result,outfile,iteration,annot_map):
 
     t2 = time.perf_counter()
     tmp,xmldata = getTubes(allPath,video_id,annot_map)
-    res,gt_label = tmp
+    # res,gt_label = tmp
 
-    t3 = time.perf_counter()
-    drawTubes(xmldata,output_dir,frames,gt_label)
+    # t3 = time.perf_counter()
+    # drawTubes(xmldata,output_dir,frames,gt_label)
 
     tf = time.perf_counter()
     tubeGenTime.append((tf-t1)/len(frame_det_res))
