@@ -1091,19 +1091,6 @@ def main():
         else:
             return 
 
-        if args.input_type == 'fastOF':
-            print('Download pretrained brox flow trained model weights and place them at:::=> ',args.data_root + 'ucf24/train_data/brox_wieghts.pth')
-            pretrained_weights = args.data_root + 'ucf24/train_data/brox_wieghts.pth'
-            print('Loading base network...')
-            net.fpn.load_state_dict(torch.load(pretrained_weights))
-        elif args.cfg['base'] == 'vgg16' or args.cfg['base'] == 'fpn':
-            vgg_weights = torch.load(args.data_root +'ucf24/train_data/' + args.basenet)
-            print('Loading base network...')
-            net.load_weights(vgg_weights)
-
-        if args.net_type != 'conv2d' and (args.cfg['base'] == 'vgg16' or args.cfg['base'] == 'fpn'):
-            net.transform(args.net_type)
-
         net.eval()
         if args.cuda:
             net = net.cuda()
