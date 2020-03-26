@@ -864,7 +864,7 @@ def process_video_result(video_result,outfile,iteration,annot_map):
 
     results = []
     for i,end in enumerate(ends):
-        if args.version > 2 or args.net_type != 'conv2d':
+        if int(args.version) > 2 or args.net_type != 'conv2d':
             if i<9:continue
         t1 = time.perf_counter()
         allPath = actionPath(frame_det_res[:end])
