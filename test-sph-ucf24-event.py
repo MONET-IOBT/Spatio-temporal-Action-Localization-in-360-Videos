@@ -1081,6 +1081,10 @@ def main():
             net = Darknet('model/yolov3/cfg/yolov3-spp.cfg', arc='CE')
         else:
             return 
+
+        if args.net_type != 'conv2d' and (args.cfg['base'] == 'vgg16' or args.cfg['base'] == 'fpn'):
+            net.transform(args.net_type)
+        
         net.load_state_dict(torch.load(trained_model_path))
 
         net.eval()
