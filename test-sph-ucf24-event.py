@@ -647,6 +647,18 @@ for iouth in IoUTHs:
     for a in range(len(CLASSES)):
         allscore[iouth][a] = np.zeros((10000,2))
     averageIoU[iouth] = np.zeros(len(CLASSES))
+
+allscore_05_portion = {}
+allscore_02_portion = {}
+cc_portion = {}
+for i in range(10):
+    allscore_05_portion[i] = {}
+    allscore_02_portion[i] = {}
+    for a in range(len(CLASSES)):
+        allscore_05_portion[i][a] = np.zeros((10000,2))
+        allscore_02_portion[i][a] = np.zeros((10000,2))
+    cc_portion[i] = [0 for _ in range(len(CLASSES))]
+
 preds = {}
 gts = {}
 for i in range(10):
@@ -672,6 +684,7 @@ def get_PR_curve(annot, xmldata,checkpoint):
     gt = action_id[0][0]
     dt_labels = dt_tubes['class']
     covered_gt_tubes = np.zeros(num_gt_tubes)
+    covered_gt_tubes_portion = np.zeros(num_gt_tubes)
     for dtind in range(num_detection):
         # frame number range
         dt_fnr = dt_tubes['framenr'][dtind]['fnr']
@@ -684,6 +697,37 @@ def get_PR_curve(annot, xmldata,checkpoint):
         if dt_tubes['score'][dtind] > maxscore:
             pred = dt_label
             maxscore = dt_tubes['score'][dtind]
+
+        # for portion
+        cc_portion[checkpoint][dt_label] += 1
+        ioumax = -10000
+        maxgtind = 0
+        for gtind in range(num_gt_tubes):
+            action_id = gt_tubes[gtind][2] - 1#class
+            # if this gt tube is not covered and has the same label as this detected tube
+            if (not covered_gt_tubes_portion[gtind]) and dt_label == action_id:
+                gt_fnr = range(gt_tubes[gtind][0][0][0] - gt_tubes[gtind][1][0][0] + 1)
+                gt_bb = gt_tubes[gtind][3]
+                iou = compute_spatial_temporal_iou(gt_fnr,gt_bb,dt_fnr,dt_bb)
+                if iou > ioumax:
+                    # find the best possible gttube based on stiou
+                    ioumax = iou
+                    maxgtind = gtind
+
+        if ioumax > 0.2:
+            covered_gt_tubes_portion[gtind] = 1
+            # records the score,T/F of each dt tube at every step for every class
+            allscore_02_portion[checkpoint][dt_label][cc_portion[checkpoint][dt_label],:] = [dt_tubes['score'][dtind],1]
+        else:
+            allscore_02_portion[checkpoint][dt_label][cc_portion[checkpoint][dt_label],:] = [dt_tubes['score'][dtind],0]
+
+        if ioumax > 0.5:
+            covered_gt_tubes_portion[gtind] = 1
+            # records the score,T/F of each dt tube at every step for every class
+            allscore_05_portion[checkpoint][dt_label][cc_portion[checkpoint][dt_label],:] = [dt_tubes['score'][dtind],1]
+        else:
+            allscore_05_portion[checkpoint][dt_label][cc_portion[checkpoint][dt_label],:] = [dt_tubes['score'][dtind],0]
+        # for portion
 
         if checkpoint == 9:
             # cc counts the number of detections per class
@@ -723,6 +767,7 @@ def evaluate_tubes(outfile):
     AIoU = np.zeros(numActions)
     AUC = np.zeros(numActions)
     
+    mAPs = []
     for iouth in IoUTHs:
         for a in range(numActions):
             tmpscore = allscore[iouth][a][:cc[a],:].copy()
@@ -734,35 +779,68 @@ def evaluate_tubes(outfile):
             tp = np.cumsum(result == 1)
             fp = fp.astype(np.float64)
             tp = tp.astype(np.float64)
-            # need to calculate AUC
-            cdet = 0
-            if len(tp) > 0:
-                cdet = int(tp[-1])
-                AIoU[a] = (averageIoU[iouth][a]+0.000001)/(cdet+0.000001) if cdet > 1 else averageIoU[iouth][a]
-
             recall = tp/float(total_num_gt_tubes[a]+1)
             precision = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
             AP[a] = voc_ap(recall,precision)
-            tp /= len(result)
-            fp /= len(result)
-            AUC[a] = auc(fp,tp)
-            ptr_str = 'Action {:02d} AP = {:0.5f} AIOU {:0.5f} AUC {:0.5f} GT {:03d} total det {:02d} correct det {:02d} {:s}\n'\
-                 .format(a, AP[a],AIoU[a],AUC[a],total_num_gt_tubes[a],cc[a],cdet,actions[a])
-            # print(ptr_str)
-            outfile.write(ptr_str)
 
         mAP = np.mean(AP)
-        mAIoU = np.mean(AIoU)
-        mAUC = np.mean(AUC)
+        mAPs.append(mAP)
 
-        ptr_str = 'IOUTH {:0.2f} Mean AP {:0.3f} meanAIoU {:0.3f} meanAUC {:0.3f}\n'.format(iouth,mAP,mAIoU,mAUC)
-        print(ptr_str)
-        outfile.write(ptr_str)
+    ptr_str = 'iouth=0.2->0.95:' + str(mAPs) + '\n'
+    print(ptr_str)
+    outfile.write(ptr_str)
+
+    # add for 0.2,0.5 portion....todo
+    mAPs = []
+    for i in range(10):
+        for a in range(numActions):
+            tmpscore = allscore_05_portion[i][a][:cc_portion[i][a],:].copy()
+            scores = tmpscore[:,0]
+            result = tmpscore[:,1]
+            si = np.argsort(-scores)
+            result = result[si]
+            fp = np.cumsum(result == 0)
+            tp = np.cumsum(result == 1)
+            fp = fp.astype(np.float64)
+            tp = tp.astype(np.float64)
+            recall = tp/float(total_num_gt_tubes[a]+1)
+            precision = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
+            AP[a] = voc_ap(recall,precision)
+
+        mAP = np.mean(AP)
+        mAPs.append(mAP)
+
+    ptr_str = 'iouth=0.5,' + str(mAPs) + '\n'
+    print(ptr_str)
+    outfile.write(ptr_str)
+
+    mAPs = []
+    for i in range(10):
+        for a in range(numActions):
+            tmpscore = allscore_02_portion[i][a][:cc_portion[i][a],:].copy()
+            scores = tmpscore[:,0]
+            result = tmpscore[:,1]
+            si = np.argsort(-scores)
+            result = result[si]
+            fp = np.cumsum(result == 0)
+            tp = np.cumsum(result == 1)
+            fp = fp.astype(np.float64)
+            tp = tp.astype(np.float64)
+            recall = tp/float(total_num_gt_tubes[a]+1)
+            precision = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
+            AP[a] = voc_ap(recall,precision)
+
+        mAP = np.mean(AP)
+        mAPs.append(mAP)
+
+    ptr_str = 'iouth=0.2,' + str(mAPs) + '\n'
+    print(ptr_str)
+    outfile.write(ptr_str)
+
 
     acc = np.zeros(10)
     for i in range(10):
         acc[i] = np.mean(np.array(preds[i])==np.array(gts[i]))
-    # acc = np.mean(np.array(preds)==np.array(gts))
     ptr_str = "Accuracy:" + str(acc) + '\n'
     print(ptr_str)
     outfile.write(ptr_str)
