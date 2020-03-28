@@ -86,19 +86,32 @@ def evaluate_detections(gt_boxes, det_boxes, CLASSES=[], iou_thresh=0.5, det_rot
     num_frames = len(gt_boxes)
     print('Evaluating for ', num_frames, 'frames')
     if det_rot is not None:
-        det_all = np.ones((4,8), dtype=np.float32)
-        cnt_all = np.zeros((4,8), dtype=np.float32)
+        ap_all_rot = np.zeros((32,len(CLASSES)), dtype=np.float32)
     ap_all = np.zeros(len(CLASSES), dtype=np.float32)
     for cls_ind, cls in enumerate(CLASSES): # loop over each class 'cls'
         scores = np.zeros(num_frames * 220)
         istp = np.zeros(num_frames * 220)
         det_count = 0
         num_postives = 0.0
+        if det_rot is not None:
+            istp_rot = {}
+            scores_rot = {}
+            det_count_rot = np.zeros(32, dtype=np.int32)
+            num_postives_rot = np.zeros(32, dtype=np.int32)
+            for i in range(32):
+                istp_rot[i] = np.zeros(num_frames * 220)
+                scores_rot[i] = np.zeros(num_frames * 220)
         for nf in range(num_frames): # loop over each frame 'nf'
-                # if len(gt_boxes[nf])>0 and len(det_boxes[cls_ind][nf]):
                 frame_det_boxes = np.copy(det_boxes[cls_ind][nf]) # get frame detections for class cls in nf
                 cls_gt_boxes = get_gt_of_cls(np.copy(gt_boxes[nf]), cls_ind) # get gt boxes for class cls in nf frame
                 num_postives += cls_gt_boxes.shape[0]
+
+                if det_rot is not None:
+                    rot_x,rot_y,rot_z = det_rot[cls_ind][nf]
+                    y = int(4*(rot_y/np.pi + 0.5))
+                    z = int(8*(rot_z/(2*np.pi) + 0.5))
+                    pos = y*8 + z
+                    num_postives_rot[pos] += cls_gt_boxes.shape[0]
                 if frame_det_boxes.shape[0]>0: # check if there are dection for class cls in nf frame
                     argsort_scores = np.argsort(-frame_det_boxes[:,-1]) # sort in descending order
                     for i, k in enumerate(argsort_scores): # start from best scoring detection of cls to end
@@ -121,12 +134,10 @@ def evaluate_detections(gt_boxes, det_boxes, CLASSES=[], iou_thresh=0.5, det_rot
                         det_count += 1
 
                         if det_rot is not None:
-                            rot_x,rot_y,rot_z = det_rot[cls_ind][nf]
-                            y = int(4*(rot_y/np.pi + 0.5))
-                            z = int(8*(rot_z/(2*np.pi) + 0.5))
-                            det_all[y][z] += 1
+                            scores_rot[pos][det_count_rot[pos]] = score
                             if ispositive:
-                                cnt_all[y][z] += 1
+                                istp_rot[pos][det_count_rot[pos]] = 1
+                            det_count_rot[pos] += 1 
         
         scores = scores[:det_count]
         istp = istp[:det_count]
@@ -143,10 +154,26 @@ def evaluate_detections(gt_boxes, det_boxes, CLASSES=[], iou_thresh=0.5, det_rot
         # print(cls_ind,CLASSES[cls_ind], cls_ap)
         ap_str = str(CLASSES[cls_ind]) + ' : ' + str(num_postives) + ' : ' + str(det_count) + ' : ' + str(cls_ap)
         ap_strs.append(ap_str)
-    if det_rot is not None:
-        cnt_all /= det_all
-        print(cnt_all)
-    # print ('mean ap ', np.mean(ap_all))
+
+        if det_count is not None:
+            for pos in range(32):
+                scores = scores_rot[pos][:det_count_rot[pos]]
+                istp = istp_rot[pos][:det_count_rot[pos]]
+                argsort_scores = np.argsort(-scores) # sort in descending order
+                istp = istp[argsort_scores] # reorder istp's on score sorting
+                fp = np.cumsum(istp == 0) # get false positives
+                tp = np.cumsum(istp == 1) # get  true positives
+                fp = fp.astype(np.float64)
+                tp = tp.astype(np.float64)
+                recall = tp / float(num_postives_rot[pos]+1) # compute recall
+                precision = tp / np.maximum(tp + fp, np.finfo(np.float64).eps) # compute precision
+                cls_ap = voc_ap(recall, precision) # compute average precision using voc2007 metric
+                ap_all_rot[pos][cls_ind] = cls_ap
+    if det_count is not None:
+        res = np.mean(ap_all_rot,axis=1)
+        for i in range(4):
+            print(res[i*8:(i+1)*8])
+
     return np.mean(ap_all), ap_all, ap_strs
 
 
