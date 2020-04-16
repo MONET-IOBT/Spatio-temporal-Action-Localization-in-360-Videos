@@ -59,8 +59,8 @@ parser.add_argument('--cuda', default=True, type=str2bool, help='Use cuda to tra
 parser.add_argument('--ngpu', default=1, type=str2bool, help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, help='initial learning rate')
 parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom to for loss visualization')
-parser.add_argument('--data_root', default='/home/monet/research/dataset/', help='Location of VOC root directory')
-parser.add_argument('--save_root', default='/home/monet/research/dataset/', help='Location to save checkpoint models')
+parser.add_argument('--data_root', default='/home/bo/research/dataset/', help='Location of VOC root directory')
+parser.add_argument('--save_root', default='/home/bo/research/dataset/', help='Location to save checkpoint models')
 parser.add_argument('--iou_thresh', default=0.5, type=float, help='Evaluation threshold')
 parser.add_argument('--conf_thresh', default=0.05, type=float, help='Confidence threshold for evaluation')
 parser.add_argument('--nms_thresh', default=0.45, type=float, help='NMS threshold')
@@ -316,8 +316,6 @@ def incremental_linking(frames,iouth, gap):
 
     return live_paths
 
-
-
 def doFilter(video_result,a,f,nms_thresh):
     scores = video_result[f]['scores'][:,a].squeeze()
     c_mask = scores.gt(args.conf_thresh)
@@ -347,15 +345,19 @@ def genActionPaths(video_result, a, nms_thresh, iouth,gap):
     t1 = time.perf_counter()
     for f in range(len(video_result)):
         # get decoded boxes of actual size
+        t11 = time.perf_counter()
         boxes,scores,allscores = doFilter(video_result,a,f,nms_thresh)
         action_frames[f] = {}
         action_frames[f]['boxes'] = boxes
         action_frames[f]['scores'] = scores
         action_frames[f]['allscores'] = allscores
+        t12 = time.perf_counter()
+        # print(f,t12-t11,scores)
     t2 = time.perf_counter()
 
     paths = incremental_linking(action_frames,iouth, gap)
     t3 = time.perf_counter()
+    # print(a,t2-t1,t3-t2,getPathCount(paths))
     return paths
 
 
@@ -944,14 +946,21 @@ def process_video_result(video_result,outfile,iteration,annot_map):
 
     results = []
     for i,end in enumerate(ends):
-        t1 = time.perf_counter()
-        allPath = actionPath(frame_det_res[:end])
-        res = getTubes(allPath,annot,i)
-        results.append(res)
-        t2 = time.perf_counter()
         if i==9:
+            t1 = time.perf_counter()
+            allPath = actionPath(frame_det_res[:end])
+            res = getTubes(allPath,annot,i)
+            results.append(res)
+            t2 = time.perf_counter()
             tubeGenTime.append((t2-t1)/len(frame_det_res))
-    print(len(tubeGenTime),results)
+            print(t2-t1)
+        else:
+            continue
+            # allPath = actionPath(frame_det_res[:end])
+            # res = getTubes(allPath,annot,i)
+            # results.append(res)
+
+    print(len(tubeGenTime),results,tubeGenTime[-1])
 
     if len(tubeGenTime)%100 == 0:
         evaluate_tubes(outfile)

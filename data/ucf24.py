@@ -84,6 +84,7 @@ def make_lists(rootpath, imgtype, split=1, fulltest=False):
     ratios = np.asarray([1.03, 0.75, 4.22, 1.32, 0.8, 2.36, 1.99, 2.66, 2.68, 4.51, 5.56, 2.46, 3.17, 2.76, 3.89, 2.28, 4.01, 3.08, 6.06, 3.28, 1.51, 3.05, 0.6, 3.84])
     #ratios = np.ones_like(ratios) #TODO:uncomment this line and line 155, 156 to compute new ratios might be useful for JHMDB21
     video_list = []
+    # print(len(database.keys()),'...')
     for vid, videoname in enumerate(sorted(database.keys())):
         video_list.append(videoname)
         actidx = database[videoname]['label']
@@ -144,7 +145,7 @@ def make_lists(rootpath, imgtype, split=1, fulltest=False):
                 # testlist.append([vid, frame_num+1, np.asarray([9999]), np.zeros((1,4))])
 
     # for actidx, act_count in enumerate(train_action_counts): # just to see the distribution of train and test sets
-    #     print('train {:05d} test {:05d} action {:02d} {:s}'.format(act_count, test_action_counts[actidx] , int(actidx), CLASSES[actidx]))
+    #     print('train {:05d} test {:05d} action {:02d} {:s}'.format(act_count, test_action_counts[actidx] , int(actidx), UCF24_CLASSES[actidx]))
 
     # newratios = train_action_counts/5000
     # #print('new   ratios', newratios)
