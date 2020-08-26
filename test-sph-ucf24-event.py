@@ -955,6 +955,7 @@ def process_video_result(video_result,outfile,iteration,annot_map):
             tubeGenTime.append((t2-t1)/len(frame_det_res))
             print(t2-t1)
         else:
+            # only evaluate full path
             continue
             # allPath = actionPath(frame_det_res[:end])
             # res = getTubes(allPath,annot,i)
